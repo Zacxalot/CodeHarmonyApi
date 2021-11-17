@@ -57,7 +57,6 @@ async fn getusers(db_pool: web::Data<Pool>) -> impl Responder {
     let statement = client.prepare(&"SELECT * FROM codeharmony.users").await.unwrap();
 
     for row in client.query(&statement,&[]).await.iter(){
-        let g = row;
         println!("{:?}",row.get(0));
     }
     HttpResponse::Ok()
