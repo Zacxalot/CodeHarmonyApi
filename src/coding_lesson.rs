@@ -21,7 +21,6 @@ struct CodingLessonElement{
 
 #[derive(Serialize, Deserialize)]
 enum ElementType{
-    
     div,
     h1
 }

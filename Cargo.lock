@@ -1863,6 +1863,8 @@ dependencies = [
  "bytes 1.1.0",
  "fallible-iterator",
  "postgres-protocol",
+ "serde 1.0.130",
+ "serde_json",
 ]
 
 [[package]]

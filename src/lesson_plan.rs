@@ -1,9 +1,12 @@
-use actix_web::{HttpResponse, Responder, get, post, web};
+use std::{convert::{TryFrom, TryInto}, fmt::Display};
+
+use actix_web::{HttpRequest, HttpResponse, Responder, get, post, web};
 use deadpool_postgres::{Pool};
 use serde::{Deserialize, Serialize};
 use tokio_postgres::Row;
+use serde_json::{Value};
 
-
+//Responses
 #[derive(Serialize)]
 struct NewPlanResponse {
     plan_name:String,
@@ -11,17 +14,84 @@ struct NewPlanResponse {
 }
 
 #[derive(Serialize)]
-struct PlanInfo{
+struct PlanInfoListItem{
     plan_name:String
 }
 
 #[derive(Serialize)]
 struct PlanListResponse{
-    plans:Vec<PlanInfo>
+    plans:Vec<PlanInfoListItem>
+}
+
+#[derive(Serialize)]
+struct PlanSectionListResponse{
+    sections:Vec<PlanSection>
+}
+
+
+#[derive(Serialize,Debug)]
+struct PlanSection{
+    name:String,
+    section_type:String,
+    elements:Vec<CodingLessonElement>
+}
+
+impl TryFrom<&tokio_postgres::Row> for PlanSection{
+    type Error = Box<dyn std::error::Error>;
+    fn try_from(row: &tokio_postgres::Row) -> Result<Self, Self::Error> {
+        let cols = row.columns();
+
+        println!("{:?}",cols);
+
+        if cols.len() >= 3 && cols.get(0).unwrap().name() == "section_name" && cols.get(1).unwrap().name() == "section_type" && cols.get(2).unwrap().name() == "section_elements"{
+            return Ok(
+                PlanSection{
+                    name:row.try_get::<usize,String>(0)?,
+                    section_type:row.try_get::<usize,String>(1)?,
+                    elements:serde_json::from_value(row.try_get::<usize,serde_json::Value>(2)?)?}
+            );
+        }
+        Err(Box::from("Invalid Rows"))
+    }
+}
+
+
+
+#[derive(Deserialize, Serialize,Debug)]
+struct CodingLessonElement{
+    el_type:ElementType,
+    props:Vec<Value>,
+    children:Vec<CodingLessonElement>
+}
+
+#[derive(Serialize, Deserialize,Debug)]
+enum ElementType{
+    div,
+    h1
+}
+
+impl ElementType{
+    fn from_string(string: &str) -> Result<ElementType,&str>{
+        match string {
+            "div" => return Ok(ElementType::div),
+            "h1" => return Ok(ElementType::h1),
+            _ => Err("Invalid element type")
+        }
+    }
+}
+
+
+
+
+
+// Request Payloads
+#[derive(Deserialize)]
+struct NewPlanRequest {
+    plan_name:String
 }
 
 #[derive(Deserialize)]
-struct NewPlanRequest {
+struct PlanInfoRequest {
     plan_name:String
 }
 
@@ -81,10 +151,11 @@ async fn create_lesson_plan(payload: web::Json<NewPlanRequest>, db_pool: web::Da
     })
 }
 
+// Get list of plans for dashboard
 #[get("/plan/list")]
 async fn get_plan_list(db_pool: web::Data<Pool>) -> impl Responder {
     // Get db client
-    let mut client = match db_pool.get().await{
+    let client = match db_pool.get().await{
         Ok(client) => client,
         Err(_) => return HttpResponse::InternalServerError().json(NewPlanResponse {plan_name:"-1".to_string(),msg:"Couldn't connect to server".to_string()})
     };
@@ -99,6 +170,27 @@ async fn get_plan_list(db_pool: web::Data<Pool>) -> impl Responder {
 
     // Return list of plans
     HttpResponse::Ok().json(PlanListResponse {
-        plans:plan_list.iter().map(|x| PlanInfo{plan_name:x.get(0)}).collect()
+        plans:plan_list.iter().map(|x| PlanInfoListItem{plan_name:x.get(0)}).collect()
     })
+}
+
+// Get all associated information about a plan
+#[get("/plan/info/{plan_name}")]
+async fn get_plan_info(db_pool: web::Data<Pool>, req: HttpRequest) -> Result<impl Responder,Box<dyn std::error::Error>> {
+    // Get plan name from uri
+    let plan_name = match req.match_info().get("plan_name") {
+        Some(plan_name) => plan_name,
+        None => return Err(Box::from("Plan name not found in uri"))
+    };
+
+    // Get db client
+    let client = db_pool.get().await?;
+
+    // Get the list of plans from db
+    let section_list:Vec<Row> = client.query("SELECT section_name, section_type, section_elements, coding_data FROM codeharmony.lesson_plan_section WHERE plan_name=$1 and username='user1'",&[&plan_name]).await?;
+    
+    // Return list of plans
+    Ok(HttpResponse::Ok().json(
+        section_list.iter().map(|x| PlanSection::try_from(x)).collect::<Result<Vec<_>,_>>()?
+    ))
 }
