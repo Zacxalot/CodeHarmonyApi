@@ -1,13 +1,23 @@
-use actix_web::{HttpMessage, HttpRequest, HttpResponse, Responder, post, web};
+use actix_web::{HttpResponse, Responder, get, post, web};
 use deadpool_postgres::{Pool};
 use serde::{Deserialize, Serialize};
-use tokio_postgres::error::DbError;
+use tokio_postgres::Row;
 
 
 #[derive(Serialize)]
 struct NewPlanResponse {
     plan_name:String,
     msg:String
+}
+
+#[derive(Serialize)]
+struct PlanInfo{
+    plan_name:String
+}
+
+#[derive(Serialize)]
+struct PlanListResponse{
+    plans:Vec<PlanInfo>
 }
 
 #[derive(Deserialize)]
@@ -68,5 +78,27 @@ async fn create_lesson_plan(payload: web::Json<NewPlanRequest>, db_pool: web::Da
     HttpResponse::Ok().json(NewPlanResponse {
         plan_name:inserted_plan_nanme,
         msg:String::new()
+    })
+}
+
+#[get("/plan/list")]
+async fn get_plan_list(db_pool: web::Data<Pool>) -> impl Responder {
+    // Get db client
+    let mut client = match db_pool.get().await{
+        Ok(client) => client,
+        Err(_) => return HttpResponse::InternalServerError().json(NewPlanResponse {plan_name:"-1".to_string(),msg:"Couldn't connect to server".to_string()})
+    };
+
+    // Get the list of plans from db
+    let plan_list:Vec<Row> = match client.query("SELECT plan_name FROM codeharmony.lesson_plan WHERE username='user1'",&[]).await{
+        Ok(rows) => rows,
+        Err(_) => return HttpResponse::InternalServerError().json(NewPlanResponse {plan_name:"-5".to_string(),msg:"Error creating new lesson plan".to_string()})
+    };
+
+    
+
+    // Return list of plans
+    HttpResponse::Ok().json(PlanListResponse {
+        plans:plan_list.iter().map(|x| PlanInfo{plan_name:x.get(0)}).collect()
     })
 }
