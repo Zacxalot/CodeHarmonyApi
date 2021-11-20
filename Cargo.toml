@@ -5,6 +5,9 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[profile.release]
+debug = true
+
 [dependencies]
 actix-web = "4.0.0-beta.10"
 actix-session = "0.4"
@@ -17,3 +20,4 @@ config = "0.11.0"
 derive_more = "0.99.16"
 mime = "0.3.16"
 thiserror = "1.0.30"
+wildmatch = "2.1.0"
