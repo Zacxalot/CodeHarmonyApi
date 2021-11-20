@@ -1,10 +1,13 @@
-use std::{convert::{TryFrom, TryInto}, fmt::Display};
+use std::{convert::{TryFrom, TryInto}, error::Error, fmt::Display};
 
-use actix_web::{HttpRequest, HttpResponse, Responder, get, post, web};
+use actix_web::{HttpRequest, HttpResponse, HttpResponseBuilder, Responder, error, get, http::{StatusCode, header}, post, web};
 use deadpool_postgres::{Pool};
+use derive_more::{Display};
+use thiserror::Error;
 use serde::{Deserialize, Serialize};
 use tokio_postgres::Row;
 use serde_json::{Value};
+use mime;
 
 //Responses
 #[derive(Serialize)]
@@ -174,23 +177,49 @@ async fn get_plan_list(db_pool: web::Data<Pool>) -> impl Responder {
     })
 }
 
+#[derive(Error,Debug)]
+enum CodeHarmonyResponseError {
+    #[error("Gen")]
+    GenericInternalError,
+
+    #[error("notgood")]
+    InternalError(String)
+}
+
+impl error::ResponseError for CodeHarmonyResponseError{
+    fn status_code(&self) -> actix_web::http::StatusCode {
+        match *self {
+            CodeHarmonyResponseError::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            CodeHarmonyResponseError::GenericInternalError => StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+
+    fn error_response(&self) -> HttpResponse {
+        HttpResponseBuilder::new(self.status_code())
+            .insert_header(header::ContentType(mime::TEXT_HTML_UTF_8))
+            .body(self.to_string())
+    }
+}
+
+
 // Get all associated information about a plan
 #[get("/plan/info/{plan_name}")]
-async fn get_plan_info(db_pool: web::Data<Pool>, req: HttpRequest) -> Result<impl Responder,Box<dyn std::error::Error>> {
+async fn get_plan_info(db_pool: web::Data<Pool>, req: HttpRequest) -> Result<impl Responder,CodeHarmonyResponseError> {
     // Get plan name from uri
     let plan_name = match req.match_info().get("plan_name") {
         Some(plan_name) => plan_name,
-        None => return Err(Box::from("Plan name not found in uri"))
+        None => return Err(CodeHarmonyResponseError::InternalError("bad".to_string()))
     };
 
     // Get db client
-    let client = db_pool.get().await?;
+    let client = db_pool.get().await.map_err(|_| CodeHarmonyResponseError::InternalError("Test".to_string()))?;
 
     // Get the list of plans from db
-    let section_list:Vec<Row> = client.query("SELECT section_name, section_type, section_elements, coding_data FROM codeharmony.lesson_plan_section WHERE plan_name=$1 and username='user1'",&[&plan_name]).await?;
+    let section_list:Vec<Row> = client.query("SELECT section_name, section_type, section_elements, coding_data FROM codeharmony.lesson_plan_section WHERE plan_name=$1 and username='user1'",&[&plan_name]).await
+                                      .map_err(|_| CodeHarmonyResponseError::InternalError("Test".to_string()))?;
     
     // Return list of plans
     Ok(HttpResponse::Ok().json(
-        section_list.iter().map(|x| PlanSection::try_from(x)).collect::<Result<Vec<_>,_>>()?
+        section_list.iter().map(|x| PlanSection::try_from(x)).collect::<Result<Vec<_>,_>>().map_err(|_| CodeHarmonyResponseError::InternalError("Test".to_string()))?
     ))
 }

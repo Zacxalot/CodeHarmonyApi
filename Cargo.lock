@@ -796,8 +796,11 @@ dependencies = [
  "actix-web 4.0.0-beta.10",
  "config",
  "deadpool-postgres",
+ "derive_more",
+ "mime",
  "serde 1.0.130",
  "serde_json",
+ "thiserror",
  "tokio-postgres",
 ]
 
