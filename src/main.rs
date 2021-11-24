@@ -31,7 +31,7 @@ async fn main() -> std::io::Result<()> {
 
     //Create and start server
     HttpServer::new(move || {
-        App::new().app_data(pool.clone())
+        App::new().app_data(web::Data::new(pool.clone()))
         .service(coding_lesson::get_coding_lesson)
         .service(lesson_plan::create_lesson_plan)
         .service(getusers)
