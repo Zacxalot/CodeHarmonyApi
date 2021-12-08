@@ -11,8 +11,6 @@ struct CodingLesson {
 
 #[get("/lesson/coding")]
 async fn get_coding_lesson() -> impl Responder {
-    let a = JSXElement{el_type:ElementType::from_string("div").unwrap(),props: vec![], children:JSXChild::String("Test".to_string())};
-
     HttpResponse::Ok().json(CodingLesson {
         lesson_id:1,
         elements:vec![JSXElement{el_type:ElementType::from_string("h1").unwrap(),props: vec![], children:JSXChild::JSX(vec![])}]
