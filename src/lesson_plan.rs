@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tokio_postgres::Row;
 use tokio_postgres::error::SqlState;
 use crate::error::CodeHarmonyResponseError;
-use crate::jsx_element::JSXElement;
+use crate::jsx_element::{JSXElement, ElementType, JSXChild};
 
 
 //Responses
@@ -125,6 +125,11 @@ async fn get_plan_info(db_pool: web::Data<Pool>, req: HttpRequest) -> Result<imp
         None => return Err(CodeHarmonyResponseError::BadRequest(0,"Expected plan name in uri".to_string()))
     };
 
+    let test = JSXElement{children:JSXChild::JSX(vec![]), el_type:ElementType::h1, props:vec![]};
+
+    println!("{}", serde_json::to_string(&test).map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?);
+
+    println!("Plan name request");
 
     // Get db client
     let client = db_pool.get().await

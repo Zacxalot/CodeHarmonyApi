@@ -5,7 +5,14 @@ use serde_json::Value;
 pub struct JSXElement{
     pub el_type:ElementType,
     pub props:Vec<Value>,
-    pub children:Vec<JSXElement>
+    pub children:JSXChild
+}
+
+#[derive(Deserialize, Serialize,Debug)]
+pub enum JSXChild{
+    JSX(Vec<JSXElement>),
+    String(String),
+    Empty
 }
 
 #[allow(non_camel_case_types)]
