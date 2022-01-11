@@ -1,5 +1,5 @@
 use std::{convert::TryFrom};
-use actix_web::{HttpRequest, HttpResponse, Responder, get, post, web};
+use actix_web::{HttpRequest, HttpResponse, Responder, get, post, web, put};
 use deadpool_postgres::{Pool};
 use serde::{Deserialize, Serialize};
 use tokio_postgres::Row;
@@ -31,11 +31,12 @@ struct PlanSectionListResponse{
 }
 
 
-#[derive(Serialize,Debug)]
+#[derive(Serialize,Deserialize,Debug)]
 struct PlanSection{
     name:String,
     section_type:String,
-    elements:Vec<JSXElement>
+    elements:Vec<JSXElement>,
+    order_pos:i16
 }
 
 impl TryFrom<&tokio_postgres::Row> for PlanSection{
@@ -45,12 +46,14 @@ impl TryFrom<&tokio_postgres::Row> for PlanSection{
 
         println!("{:?}",cols);
 
-        if cols.len() >= 3 && cols.get(0).unwrap().name() == "section_name" && cols.get(1).unwrap().name() == "section_type" && cols.get(2).unwrap().name() == "section_elements"{
+        if cols.len() >= 5 && cols.get(0).unwrap().name() == "section_name" && cols.get(1).unwrap().name() == "section_type" && cols.get(2).unwrap().name() == "section_elements" && cols.get(4).unwrap().name() == "order_pos"{
             return Ok(
                 PlanSection{
                     name:row.try_get::<usize,String>(0)?,
                     section_type:row.try_get::<usize,String>(1)?,
-                    elements:serde_json::from_value(row.try_get::<usize,serde_json::Value>(2)?)?}
+                    elements:serde_json::from_value(row.try_get::<usize,serde_json::Value>(2)?)?,
+                    order_pos:row.try_get::<usize,i16>(4)?
+                }
             );
         }
         Err(Box::from("Invalid Rows"))
@@ -127,16 +130,12 @@ async fn get_plan_info(db_pool: web::Data<Pool>, req: HttpRequest) -> Result<imp
 
     let test = JSXElement{children:JSXChild::JSX(vec![]), el_type:ElementType::h1, props:vec![]};
 
-    println!("{}", serde_json::to_string(&test).map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?);
-
-    println!("Plan name request");
-
     // Get db client
     let client = db_pool.get().await
                                       .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
     // Get the list of plans from db
-    let section_list:Vec<Row> = client.query("SELECT section_name, section_type, section_elements, coding_data FROM codeharmony.lesson_plan_section WHERE plan_name=$1 and username='user1'",&[&plan_name]).await
+    let section_list:Vec<Row> = client.query("SELECT section_name, section_type, section_elements, coding_data, order_pos FROM codeharmony.lesson_plan_section WHERE plan_name=$1 and username='user1'",&[&plan_name]).await
                                       .map_err(|_| CodeHarmonyResponseError::InternalError(1,"Couldn't get rows from database".to_string()))?;
     
     // Return list of plans
@@ -144,6 +143,31 @@ async fn get_plan_info(db_pool: web::Data<Pool>, req: HttpRequest) -> Result<imp
         section_list.iter()
                     .map(|x| PlanSection::try_from(x))
                     .collect::<Result<Vec<_>,_>>()
-                    .map_err(|_| CodeHarmonyResponseError::InternalError(2,"Invalid row format!".to_string()))?
+                    .map_err(|e| {println!("{:?}",e);CodeHarmonyResponseError::InternalError(2,"Invalid row format!".to_string())})?
     ))
+}
+
+// Update the json data for a plan section
+#[put("/plan/info/{plan_name}")]
+async fn set_plan_section(db_pool: web::Data<Pool>, req: HttpRequest, section: web::Json<PlanSection>) -> Result<impl Responder,CodeHarmonyResponseError> {
+    // Get plan name from uri
+    let plan_name = match req.match_info().get("plan_name") {
+        Some(plan_name) => plan_name,
+        None => return Err(CodeHarmonyResponseError::BadRequest(0,"Expected plan name in uri".to_string()))
+    };
+
+    // Get db client
+    let client = db_pool.get().await
+                                      .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+    // Get the body as a json string
+    let section_json = serde_json::to_value(&section.elements)
+                                         .map_err(|_| CodeHarmonyResponseError::BadRequest(1,"Couldn't serialise json".to_string()))?;
+
+    // Send the update query with the new section json data
+    client.query("UPDATE codeharmony.lesson_plan_section SET section_elements = $1, order_pos = $2 WHERE plan_name = $3 and section_name=$4 and username='user1'",&[&section_json,&section.order_pos,&plan_name,&section.name]).await
+          .map_err(|e| {println!("{:?}",e);CodeHarmonyResponseError::InternalError(1,"Couldn't update database".to_string())})?;
+    
+    // Return Ok!
+    Ok(HttpResponse::Ok())
 }
