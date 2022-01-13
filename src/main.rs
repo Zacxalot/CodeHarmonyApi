@@ -38,6 +38,7 @@ async fn main() -> std::io::Result<()> {
         .service(lesson_plan::get_plan_list)
         .service(lesson_plan::get_plan_info)
         .service(lesson_plan::set_plan_section)
+        .service(lesson_plan::perform_plan_operation)
     })
     .bind("127.0.0.1:8080")?
     .run()

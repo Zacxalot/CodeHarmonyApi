@@ -43,7 +43,7 @@ CREATE TABLE codeharmony.lesson_session (
 CREATE TABLE codeharmony.lesson_plan_section (
 	plan_name VARCHAR(128) NOT NULL,
 	username VARCHAR(32) NOT NULL,
-	section_elements JSONB NOT NULL,
+	section_elements JSONB NOT null default '[]',
 	order_pos int2 NOT NULL,
 	coding_data JSONB NOT NULL DEFAULT '{}',
 	section_name VARCHAR(64) NOT NULL,

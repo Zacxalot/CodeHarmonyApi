@@ -2,10 +2,11 @@ use std::{convert::TryFrom};
 use actix_web::{HttpRequest, HttpResponse, Responder, get, post, web, put};
 use deadpool_postgres::{Pool};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tokio_postgres::Row;
 use tokio_postgres::error::SqlState;
 use crate::error::CodeHarmonyResponseError;
-use crate::jsx_element::{JSXElement, ElementType, JSXChild};
+use crate::jsx_element::{JSXElement};
 
 
 //Responses
@@ -38,6 +39,20 @@ struct PlanSection{
     elements:Vec<JSXElement>,
     order_pos:i16
 }
+
+#[derive(Serialize,Deserialize,Debug)]
+struct PlanOperation{
+    request:String,
+    data:Value
+}
+
+#[derive(Deserialize,Debug)]
+struct NewSectionData{
+    section_name:String,
+    order_pos:i16
+}
+
+
 
 impl TryFrom<&tokio_postgres::Row> for PlanSection{
     type Error = Box<dyn std::error::Error>;
@@ -128,14 +143,12 @@ async fn get_plan_info(db_pool: web::Data<Pool>, req: HttpRequest) -> Result<imp
         None => return Err(CodeHarmonyResponseError::BadRequest(0,"Expected plan name in uri".to_string()))
     };
 
-    let test = JSXElement{children:JSXChild::JSX(vec![]), el_type:ElementType::h1, props:vec![]};
-
     // Get db client
     let client = db_pool.get().await
                                       .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
     // Get the list of plans from db
-    let section_list:Vec<Row> = client.query("SELECT section_name, section_type, section_elements, coding_data, order_pos FROM codeharmony.lesson_plan_section WHERE plan_name=$1 and username='user1'",&[&plan_name]).await
+    let section_list:Vec<Row> = client.query("SELECT section_name, section_type, section_elements, coding_data, order_pos FROM codeharmony.lesson_plan_section WHERE plan_name=$1 and username='user1' ORDER BY order_pos ASC",&[&plan_name]).await
                                       .map_err(|_| CodeHarmonyResponseError::InternalError(1,"Couldn't get rows from database".to_string()))?;
     
     // Return list of plans
@@ -169,5 +182,31 @@ async fn set_plan_section(db_pool: web::Data<Pool>, req: HttpRequest, section: w
           .map_err(|e| {println!("{:?}",e);CodeHarmonyResponseError::InternalError(1,"Couldn't update database".to_string())})?;
     
     // Return Ok!
+    Ok(HttpResponse::Ok())
+}
+
+
+// Add new section to plan
+#[post("/plan/info/{plan_name}")]
+async fn perform_plan_operation(db_pool: web::Data<Pool>, req: HttpRequest, operation: web::Json<PlanOperation>) -> Result<impl Responder,CodeHarmonyResponseError> {
+    // Get plan name from uri
+    let plan_name = match req.match_info().get("plan_name") {
+        Some(plan_name) => plan_name,
+        None => return Err(CodeHarmonyResponseError::BadRequest(0,"Expected plan name in uri".to_string()))
+    };
+
+
+    // Get db client
+    let client = db_pool.get().await
+                                      .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+
+    if &operation.request == "new-section"{
+        let data:NewSectionData = serde_json::from_value(operation.data.to_owned()).map_err(|_| CodeHarmonyResponseError::BadRequest(1,"Invalid operation data".to_string()))?;
+
+        client.query("INSERT INTO codeharmony.lesson_plan_section(plan_name,username,order_pos,section_name,section_type) VALUES($1,$2,$3,$4,$5)",&[&plan_name,&"user1",&data.order_pos,&data.section_name,&"LECTURE"]).await
+              .map_err(|e| {println!("{:?}",e);CodeHarmonyResponseError::InternalError(2,"Couldn't add section".to_string())})?;
+    }
+
     Ok(HttpResponse::Ok())
 }
