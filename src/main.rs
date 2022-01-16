@@ -8,6 +8,7 @@ mod coding_lesson;
 mod lesson_plan;
 mod error;
 mod jsx_element;
+mod lesson_session;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -33,12 +34,9 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new().app_data(web::Data::new(pool.clone()))
         .service(coding_lesson::get_coding_lesson)
-        .service(lesson_plan::create_lesson_plan)
         .service(getusers)
-        .service(lesson_plan::get_plan_list)
-        .service(lesson_plan::get_plan_info)
-        .service(lesson_plan::set_plan_section)
-        .service(lesson_plan::perform_plan_operation)
+        .configure(lesson_plan::init)
+        
     })
     .bind("127.0.0.1:8080")?
     .run()

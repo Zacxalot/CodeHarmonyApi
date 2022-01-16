@@ -52,6 +52,14 @@ struct NewSectionData{
     order_pos:i16
 }
 
+// Group all of the services together into a single init
+pub fn init(cfg: &mut web::ServiceConfig){
+    cfg.service(create_lesson_plan)
+    .service(get_plan_list)
+    .service(get_plan_info)
+    .service(set_plan_section)
+    .service(perform_plan_operation);
+}
 
 
 impl TryFrom<&tokio_postgres::Row> for PlanSection{
