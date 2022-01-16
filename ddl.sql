@@ -32,12 +32,13 @@ CREATE TABLE codeharmony.published_lesson_plan (
 
 
 CREATE TABLE codeharmony.lesson_session (
-	session_date TIMESTAMP NOT NULL,
-	session_username VARCHAR(32) NOT NULL,
+	session_date TIMESTAMP NOT NULL DEFAULT current_timestamp,
+	session_name VARCHAR(128) NOT NULL,
 	plan_name VARCHAR(128) NOT NULL,
-    plan_username VARCHAR(32) NOT NULL,
+    username VARCHAR(32) NOT NULL,
 	
-	CONSTRAINT lesson_session_pk PRIMARY KEY (session_date,plan_name,plan_username,session_username)
+	CONSTRAINT lesson_session_pk PRIMARY KEY (session_date,session_name,plan_name,username),
+	CONSTRAINT lesson_session_plan_name_fk FOREIGN KEY (plan_name,username) REFERENCES codeharmony.lesson_plan(plan_name,username)
 );
 
 CREATE TABLE codeharmony.lesson_plan_section (

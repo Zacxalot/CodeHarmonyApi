@@ -36,6 +36,7 @@ async fn main() -> std::io::Result<()> {
         .service(coding_lesson::get_coding_lesson)
         .service(getusers)
         .configure(lesson_plan::init)
+        .configure(lesson_session::init)
         
     })
     .bind("127.0.0.1:8080")?
