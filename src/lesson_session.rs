@@ -1,5 +1,6 @@
 use actix_web::{Responder, web, post, HttpResponse, HttpRequest};
 use deadpool_postgres::Pool;
+use serde_json::json;
 
 use crate::error::CodeHarmonyResponseError;
 
@@ -34,5 +35,5 @@ async fn create_session(db_pool: web::Data<Pool>, req: HttpRequest) -> Result<im
         .map_err(|e| {println!("{:?}",e); CodeHarmonyResponseError::InternalError(1,"Couldn't create lesson session".to_string())})?;
 
 
-    Ok(HttpResponse::Ok())
+    Ok(HttpResponse::Ok().json(json!({"plan_name":plan_name,"session_name":session_name})))
 }

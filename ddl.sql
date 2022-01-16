@@ -37,7 +37,7 @@ CREATE TABLE codeharmony.lesson_session (
 	plan_name VARCHAR(128) NOT NULL,
     username VARCHAR(32) NOT NULL,
 	
-	CONSTRAINT lesson_session_pk PRIMARY KEY (session_date,session_name,plan_name,username),
+	CONSTRAINT lesson_session_pk PRIMARY KEY (session_name,plan_name,username),
 	CONSTRAINT lesson_session_plan_name_fk FOREIGN KEY (plan_name,username) REFERENCES codeharmony.lesson_plan(plan_name,username)
 );
 
