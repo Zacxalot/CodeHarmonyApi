@@ -1,6 +1,6 @@
 use std::{convert::TryFrom};
 use actix_web::{HttpRequest, HttpResponse, Responder, get, post, web, put};
-use deadpool_postgres::{Pool};
+use deadpool_postgres::{Pool, Object, Manager};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio_postgres::Row;
@@ -33,7 +33,7 @@ struct PlanSectionListResponse{
 
 
 #[derive(Serialize,Deserialize,Debug)]
-struct PlanSection{
+pub struct PlanSection{
     name:String,
     section_type:String,
     elements:Vec<JSXElement>,
@@ -166,18 +166,30 @@ async fn get_plan_info(db_pool: web::Data<Pool>, req: HttpRequest) -> Result<imp
     let client = db_pool.get().await
                                       .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
-    // Get the list of plans from db
-    let section_list:Vec<Row> = client.query("SELECT section_name, section_type, section_elements, coding_data, order_pos FROM codeharmony.lesson_plan_section WHERE plan_name=$1 and username='user1' ORDER BY order_pos ASC",&[&plan_name]).await
-                                      .map_err(|_| CodeHarmonyResponseError::InternalError(1,"Couldn't get rows from database".to_string()))?;
+    // Get sections from database
+    let sections = get_plan_info_query(&client,plan_name).await?;
     
     // Return list of plans
     Ok(HttpResponse::Ok().json(
-        section_list.iter()
-                    .map(|x| PlanSection::try_from(x))
-                    .collect::<Result<Vec<_>,_>>()
-                    .map_err(|e| {println!("{:?}",e);CodeHarmonyResponseError::InternalError(2,"Invalid row format!".to_string())})?
+        sections
     ))
 }
+
+// Get sections from the database
+pub async fn get_plan_info_query(client:  &Object,plan_name:&str) -> Result<Vec<PlanSection>,CodeHarmonyResponseError>{
+    // Get rows from database
+    let rows = client.query("SELECT section_name, section_type, section_elements, coding_data, order_pos FROM codeharmony.lesson_plan_section WHERE plan_name=$1 and username='user1' ORDER BY order_pos ASC",&[&plan_name]).await
+                                      .map_err(|_| CodeHarmonyResponseError::InternalError(1,"Couldn't get rows from database".to_string()))?;
+
+    // Convert rows to Vec
+    let plan_sections = rows.iter()
+                        .map(|x| PlanSection::try_from(x))
+                        .collect::<Result<Vec<_>,_>>()
+                        .map_err(|e| {println!("{:?}",e);CodeHarmonyResponseError::InternalError(2,"Invalid row format!".to_string())})?;
+
+    Ok(plan_sections)
+}
+
 
 // Update the json data for a plan section
 #[put("/plan/info/{plan_name}")]
