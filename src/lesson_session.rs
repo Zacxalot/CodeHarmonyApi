@@ -1,13 +1,22 @@
-use actix_web::{Responder, web, post, HttpResponse, HttpRequest};
+use actix_web::{Responder, web, HttpResponse, HttpRequest, post, get};
 use deadpool_postgres::Pool;
 use pct_str::PctStr;
+use serde::Serialize;
 use serde_json::json;
+use tokio_postgres::Row;
 
 use crate::error::CodeHarmonyResponseError;
 
+#[derive(Serialize)]
+struct SessionListItem{
+    plan_name:String,
+    session_name:String
+}
+
 // Group all of the services together into a single init
 pub fn init(cfg: &mut web::ServiceConfig){
-    cfg.service(create_session);
+    cfg.service(create_session)
+    .service(get_session_list);
 }
 
 
@@ -37,4 +46,20 @@ async fn create_session(db_pool: web::Data<Pool>, req: HttpRequest) -> Result<im
 
 
     Ok(HttpResponse::Ok().json(json!({"plan_name":plan_name,"session_name":session_name})))
+}
+
+// Get list of plans for dashboard
+#[get("/session/list")]
+async fn get_session_list(db_pool: web::Data<Pool>) -> Result<impl Responder,CodeHarmonyResponseError> {
+    // Get db client
+    let client = db_pool.get().await.map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+    // Get the list of plans from db
+    let session_list:Vec<Row> = client.query("SELECT plan_name,session_name FROM codeharmony.lesson_session WHERE username='user1'",&[]).await
+                                   .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+    // Return list of plans
+    Ok(HttpResponse::Ok().json(json!({
+        "sessions":session_list.iter().map(|row| SessionListItem{plan_name:row.get(0),session_name:row.get(1)}).collect::<Vec<SessionListItem>>()
+    })))
 }
