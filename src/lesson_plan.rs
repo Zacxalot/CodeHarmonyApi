@@ -2,7 +2,7 @@ use std::{convert::TryFrom};
 use actix_web::{HttpRequest, HttpResponse, Responder, get, post, web, put};
 use deadpool_postgres::{Pool};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use tokio_postgres::Row;
 use tokio_postgres::error::SqlState;
 use crate::error::CodeHarmonyResponseError;
@@ -50,6 +50,12 @@ struct PlanOperation{
 struct NewSectionData{
     section_name:String,
     order_pos:i16
+}
+
+#[derive(Serialize)]
+struct SessionListItem{
+    plan_name:String,
+    session_name:String
 }
 
 // Group all of the services together into a single init
@@ -135,10 +141,15 @@ async fn get_plan_list(db_pool: web::Data<Pool>) -> Result<impl Responder,CodeHa
     let plan_list:Vec<Row> = client.query("SELECT plan_name FROM codeharmony.lesson_plan WHERE username='user1'",&[]).await
                                    .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
+    // Get the list of sessions from db
+    let session_list:Vec<Row> = client.query("SELECT plan_name,session_name FROM codeharmony.lesson_session WHERE username='user1'",&[]).await
+                                   .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
     // Return list of plans
-    Ok(HttpResponse::Ok().json(PlanListResponse {
-        plans:plan_list.iter().map(|x| PlanInfoListItem{plan_name:x.get(0)}).collect()
-    }))
+    Ok(HttpResponse::Ok().json(json!({
+        "plans":plan_list.iter().map(|x| PlanInfoListItem{plan_name:x.get(0)}).collect::<Vec<PlanInfoListItem>>(),
+        "sessions":session_list.iter().map(|row| SessionListItem{plan_name:row.get(0),session_name:row.get(1)}).collect::<Vec<SessionListItem>>()
+    })))
 }
 
 
