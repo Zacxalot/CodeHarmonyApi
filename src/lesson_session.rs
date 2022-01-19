@@ -5,7 +5,6 @@ use pct_str::PctStr;
 use serde::Serialize;
 use serde_json::json;
 use futures::join;
-use tokio_postgres::types::Timestamp;
 
 use crate::{error::CodeHarmonyResponseError, lesson_plan};
 
@@ -72,9 +71,10 @@ async fn get_session_info(db_pool: web::Data<Pool>, req: HttpRequest) -> Result<
     let plan_future = lesson_plan::get_plan_info_query(&client,&plan_name);
     let session_future = get_plan_info_query(&client,&plan_name,&session_name);
 
-    // Wait for results
+    // Wait for both futures at once
     let (plan_info_result,session_info_result) = join!(plan_future,session_future);
 
+    // Get values from results
     let plan_info = plan_info_result?;
     let session_info = session_info_result?;
 
@@ -89,12 +89,8 @@ async fn get_plan_info_query(client:  &Object,plan_name:&str,session_name:&str) 
 
     let row = rows.first().ok_or(CodeHarmonyResponseError::InternalError(2,"Could not find session".to_string()))?;
 
-    println!("{:?}", row.columns());
-
     let date:NaiveDateTime = row.try_get(0)
                       .map_err(|_| CodeHarmonyResponseError::InternalError(3,"Couldn't parse date".to_string()))?;
-
-    println!("{}",date);
 
     Ok(SessionInfo{date:date.timestamp_millis()})
 }

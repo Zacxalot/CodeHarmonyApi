@@ -1,6 +1,6 @@
 use std::{convert::TryFrom};
 use actix_web::{HttpRequest, HttpResponse, Responder, get, post, web, put};
-use deadpool_postgres::{Pool, Object, Manager};
+use deadpool_postgres::{Pool, Object};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio_postgres::Row;
@@ -72,8 +72,6 @@ impl TryFrom<&tokio_postgres::Row> for PlanSection{
     type Error = Box<dyn std::error::Error>;
     fn try_from(row: &tokio_postgres::Row) -> Result<Self, Self::Error> {
         let cols = row.columns();
-
-        println!("{:?}",cols);
 
         if cols.len() >= 5 && cols.get(0).unwrap().name() == "section_name" && cols.get(1).unwrap().name() == "section_type" && cols.get(2).unwrap().name() == "section_elements" && cols.get(4).unwrap().name() == "order_pos"{
             return Ok(
