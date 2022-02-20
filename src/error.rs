@@ -1,24 +1,26 @@
+use actix_web::{
+    error,
+    http::{header, StatusCode},
+    HttpResponse, HttpResponseBuilder,
+};
 use thiserror::Error;
-use mime;
-use actix_web::{error, HttpResponse, HttpResponseBuilder, http::{StatusCode, header}};
 
-#[derive(Error,Debug)]
+#[derive(Error, Debug)]
 pub enum CodeHarmonyResponseError {
     #[error("{{\"errcode\": {0}, \"msg\": \"{1}\"}}")]
-    InternalError(i32,String),
+    InternalError(i32, String),
     #[error("{{\"errcode\": {0}, \"msg\": \"{1}\"}}")]
-    BadRequest(i32,String),
+    BadRequest(i32, String),
     #[error("{{\"errcode\": 0, \"msg\": \"Couldn't connect to database\"}}")]
     DatabaseConnection,
-
 }
 
-impl error::ResponseError for CodeHarmonyResponseError{
+impl error::ResponseError for CodeHarmonyResponseError {
     fn status_code(&self) -> actix_web::http::StatusCode {
         match *self {
-            CodeHarmonyResponseError::InternalError(_,_) => StatusCode::INTERNAL_SERVER_ERROR,
-            CodeHarmonyResponseError::BadRequest(_,_) => StatusCode::BAD_REQUEST,
-            CodeHarmonyResponseError::DatabaseConnection => StatusCode::INTERNAL_SERVER_ERROR
+            CodeHarmonyResponseError::InternalError(_, _) => StatusCode::INTERNAL_SERVER_ERROR,
+            CodeHarmonyResponseError::BadRequest(_, _) => StatusCode::BAD_REQUEST,
+            CodeHarmonyResponseError::DatabaseConnection => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
