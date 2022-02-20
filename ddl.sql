@@ -59,9 +59,9 @@ INSERT INTO codeharmony.lesson_plan (plan_name, username) VALUES('test', 'user1'
 INSERT INTO codeharmony.lesson_plan_section (plan_name,username,section_elements,section_name,section_type, order_pos) 
 VALUES('test','user1',
 '[
-	{"el_type":"h1","props":{},"children":{"String":"Test"}},
-	{"el_type":"p","props":{},"children":{"String":"This is just a paragraph"}},
-	{"el_type":"h1","props":{},"children":{"String":"Test2"}}
+	{"elType":"h1","props":{},"children":{"String":"Test"}},
+	{"elType":"p","props":{},"children":{"String":"This is just a paragraph"}},
+	{"elType":"h1","props":{},"children":{"String":"Test2"}}
 ]',
 'Introduction',
 'LECTURE',

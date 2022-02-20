@@ -44,13 +44,13 @@ async fn main() -> std::io::Result<()> {
 
 // #[derive(Serialize, Deserialize)]
 // struct InfoObj {
-//     el_type:String
+//     elType:String
 // }
 
 // #[get("/infotest")]
 // async fn infotest() -> impl Responder {
 //     HttpResponse::Ok().json(InfoObj {
-//         el_type:String::from("h1")
+//         elType:String::from("h1")
 //     })
 // }
 

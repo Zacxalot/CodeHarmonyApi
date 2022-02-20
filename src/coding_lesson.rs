@@ -14,7 +14,7 @@ async fn get_coding_lesson() -> impl Responder {
     HttpResponse::Ok().json(CodingLesson {
         lesson_id: 1,
         elements: vec![JSXElement {
-            el_type: ElementType::from_string("h1").unwrap(),
+            elType: ElementType::from_string("h1").unwrap(),
             props: json!({}),
             children: JSXChild::JSX(vec![]),
         }],

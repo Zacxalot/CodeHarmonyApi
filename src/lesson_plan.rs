@@ -10,14 +10,16 @@ use tokio_postgres::Row;
 
 //Responses
 #[derive(Serialize)]
+#[allow(non_snake_case)]
 struct NewPlanResponse {
-    plan_name: String,
+    planName: String,
     msg: String,
 }
 
 #[derive(Serialize)]
+#[allow(non_snake_case)]
 struct PlanInfoListItem {
-    plan_name: String,
+    planName: String,
 }
 
 #[derive(Serialize)]
@@ -31,11 +33,12 @@ struct PlanSectionListResponse {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[allow(non_snake_case)]
 pub struct PlanSection {
     name: String,
-    section_type: String,
+    sectionType: String,
     elements: Vec<JSXElement>,
-    order_pos: i16,
+    orderPos: i16,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -45,15 +48,17 @@ struct PlanOperation {
 }
 
 #[derive(Deserialize, Debug)]
+#[allow(non_snake_case)]
 struct NewSectionData {
-    section_name: String,
-    order_pos: i16,
+    sectionName: String,
+    orderPos: i16,
 }
 
 #[derive(Serialize)]
+#[allow(non_snake_case)]
 struct SessionListItem {
-    plan_name: String,
-    session_name: String,
+    planName: String,
+    sessionName: String,
 }
 
 // Group all of the services together into a single init
@@ -78,9 +83,9 @@ impl TryFrom<&tokio_postgres::Row> for PlanSection {
         {
             return Ok(PlanSection {
                 name: row.try_get::<usize, String>(0)?,
-                section_type: row.try_get::<usize, String>(1)?,
+                sectionType: row.try_get::<usize, String>(1)?,
                 elements: serde_json::from_value(row.try_get::<usize, serde_json::Value>(2)?)?,
-                order_pos: row.try_get::<usize, i16>(4)?,
+                orderPos: row.try_get::<usize, i16>(4)?,
             });
         }
         Err(Box::from("Invalid Rows"))
@@ -89,8 +94,9 @@ impl TryFrom<&tokio_postgres::Row> for PlanSection {
 
 // Request Payloads
 #[derive(Deserialize)]
+#[allow(non_snake_case)]
 struct NewPlanRequest {
-    plan_name: String,
+    planName: String,
 }
 
 // Request a new plan
@@ -115,7 +121,7 @@ async fn create_lesson_plan(
     transaction
         .query(
             "INSERT INTO codeharmony.lesson_plan(username,plan_name) VALUES ('user1',$1)",
-            &[&payload.plan_name],
+            &[&payload.planName],
         )
         .await
         .map_err(|err| match err.as_db_error() {
@@ -133,7 +139,7 @@ async fn create_lesson_plan(
     let inserted_plan_name: String = transaction
         .query(
             "SELECT plan_name FROM codeharmony.lesson_plan WHERE plan_name=$1",
-            &[&payload.plan_name],
+            &[&payload.planName],
         )
         .await
         .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?[0]
@@ -147,7 +153,7 @@ async fn create_lesson_plan(
 
     // Return ok with the new plan name
     Ok(HttpResponse::Ok().json(NewPlanResponse {
-        plan_name: inserted_plan_name,
+        planName: inserted_plan_name,
         msg: String::new(),
     }))
 }
@@ -183,8 +189,8 @@ async fn get_plan_list(
 
     // Return list of plans
     Ok(HttpResponse::Ok().json(json!({
-        "plans":plan_list.iter().map(|x| PlanInfoListItem{plan_name:x.get(0)}).collect::<Vec<PlanInfoListItem>>(),
-        "sessions":session_list.iter().map(|row| SessionListItem{plan_name:row.get(0),session_name:row.get(1)}).collect::<Vec<SessionListItem>>()
+        "plans":plan_list.iter().map(|x| PlanInfoListItem{planName:x.get(0)}).collect::<Vec<PlanInfoListItem>>(),
+        "sessions":session_list.iter().map(|row| SessionListItem{planName:row.get(0),sessionName:row.get(1)}).collect::<Vec<SessionListItem>>()
     })))
 }
 
@@ -270,7 +276,7 @@ async fn set_plan_section(
     })?;
 
     // Send the update query with the new section json data
-    client.query("UPDATE codeharmony.lesson_plan_section SET section_elements = $1, order_pos = $2 WHERE plan_name = $3 and section_name=$4 and username='user1'",&[&section_json,&section.order_pos,&plan_name,&section.name]).await
+    client.query("UPDATE codeharmony.lesson_plan_section SET section_elements = $1, order_pos = $2 WHERE plan_name = $3 and section_name=$4 and username='user1'",&[&section_json,&section.orderPos,&plan_name,&section.name]).await
           .map_err(|e| {println!("{:?}",e);CodeHarmonyResponseError::InternalError(1,"Couldn't update database".to_string())})?;
 
     // Return Ok!
@@ -307,7 +313,7 @@ async fn perform_plan_operation(
                 CodeHarmonyResponseError::BadRequest(1, "Invalid operation data".to_string())
             })?;
 
-        client.query("INSERT INTO codeharmony.lesson_plan_section(plan_name,username,order_pos,section_name,section_type) VALUES($1,$2,$3,$4,$5)",&[&plan_name,&"user1",&data.order_pos,&data.section_name,&"LECTURE"]).await
+        client.query("INSERT INTO codeharmony.lesson_plan_section(plan_name,username,order_pos,section_name,section_type) VALUES($1,$2,$3,$4,$5)",&[&plan_name,&"user1",&data.orderPos,&data.sectionName,&"LECTURE"]).await
               .map_err(|e| {println!("{:?}",e);CodeHarmonyResponseError::InternalError(2,"Couldn't add section".to_string())})?;
     }
 

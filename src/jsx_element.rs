@@ -3,7 +3,7 @@ use serde_json::Value;
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct JSXElement {
-    pub el_type: ElementType,
+    pub elType: ElementType,
     pub props: Value,
     pub children: JSXChild,
 }
