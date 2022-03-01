@@ -5,6 +5,7 @@ use futures::join;
 use pct_str::PctStr;
 use serde::Serialize;
 use serde_json::json;
+use tokio_postgres::error::SqlState;
 
 use crate::{error::CodeHarmonyResponseError, lesson_plan};
 
@@ -51,14 +52,40 @@ async fn create_session(
     };
 
     // Get db client
-    let client = db_pool
+    let mut client = db_pool
         .get()
         .await
         .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
-    // Create session record in database
-    client.query("INSERT INTO codeharmony.lesson_session(plan_name,session_name,username) VALUES ($1,$2,$3)",&[&plan_name, &session_name,&"user1"]).await
-        .map_err(|e| {println!("{:?}",e); CodeHarmonyResponseError::InternalError(1,"Couldn't create lesson session".to_string())})?;
+    // Start transaction
+    let transaction = client
+        .transaction()
+        .await
+        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+    // Try to insert the new plan into to the db
+    transaction
+        .query(
+            "INSERT INTO codeharmony.lesson_session(plan_name,session_name,username) VALUES ($1,$2,$3)",
+            &[&plan_name, &session_name,&"user1"],
+        )
+        .await
+        .map_err(|err| match err.as_db_error() {
+            Some(err) => match *err.code() {
+                SqlState::UNIQUE_VIOLATION => CodeHarmonyResponseError::BadRequest(
+                    0,
+                    "Session already exists under this name".to_string(),
+                ),
+                _ => CodeHarmonyResponseError::DatabaseConnection,
+            },
+            None => CodeHarmonyResponseError::DatabaseConnection,
+        })?;
+
+    // Commit transaction, everything went well
+    transaction
+        .commit()
+        .await
+        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
     Ok(HttpResponse::Ok().json(json!({"plan_name":plan_name,"session_name":session_name})))
 }
