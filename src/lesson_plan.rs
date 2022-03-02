@@ -5,6 +5,7 @@ use deadpool_postgres::{Object, Pool};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::convert::TryFrom;
+use std::string;
 use tokio_postgres::error::SqlState;
 use tokio_postgres::Row;
 
@@ -67,7 +68,8 @@ pub fn init(cfg: &mut web::ServiceConfig) {
         .service(get_plan_list)
         .service(get_plan_info)
         .service(set_plan_section)
-        .service(perform_plan_operation);
+        .service(perform_plan_operation)
+        .service(update_plan_section_name);
 }
 
 impl TryFrom<&tokio_postgres::Row> for PlanSection {
@@ -244,6 +246,50 @@ pub async fn get_plan_info_query(
         })?;
 
     Ok(plan_sections)
+}
+
+#[derive(Deserialize)]
+#[allow(non_snake_case)]
+struct RenameSectionJSON {
+    old_section_name: String,
+    new_section_name: String,
+}
+
+//Rename a plan section
+#[put("/plan/info/{plan_name}/rename")]
+async fn update_plan_section_name(
+    db_pool: web::Data<Pool>,
+    req: HttpRequest,
+    section_names: web::Json<RenameSectionJSON>,
+) -> Result<impl Responder, CodeHarmonyResponseError> {
+    // Get db client
+    let client = db_pool
+        .get()
+        .await
+        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+    // Get plan name from uri
+    let plan_name = match req.match_info().get("plan_name") {
+        Some(plan_name) => plan_name,
+        None => {
+            return Err(CodeHarmonyResponseError::BadRequest(
+                0,
+                "Expected plan name in uri".to_string(),
+            ))
+        }
+    };
+
+    println!(
+        "{} -> {}",
+        section_names.old_section_name, section_names.new_section_name
+    );
+
+    client.query("UPDATE codeharmony.lesson_plan_section SET section_name = $1 WHERE section_name = $2 and plan_name = $3 and username = $4",
+    &[&section_names.new_section_name,&section_names.old_section_name, &plan_name, &"user1".to_string()]).await
+        .map_err(|e| {println!("{:?}",e);CodeHarmonyResponseError::InternalError(1,"Couldn't update database".to_string())})?;
+
+    // Return Ok!
+    Ok(HttpResponse::Ok())
 }
 
 // Update the json data for a plan section
