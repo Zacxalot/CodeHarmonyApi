@@ -13,6 +13,8 @@ pub enum CodeHarmonyResponseError {
     BadRequest(i32, String),
     #[error("{{\"errcode\": 0, \"msg\": \"Couldn't connect to database\"}}")]
     DatabaseConnection,
+    #[error("{{\"errcode\": 0, \"msg\": \"Couldn't connect to Redis\"}}")]
+    RedisConnection,
 }
 
 impl error::ResponseError for CodeHarmonyResponseError {
@@ -21,6 +23,7 @@ impl error::ResponseError for CodeHarmonyResponseError {
             CodeHarmonyResponseError::InternalError(_, _) => StatusCode::INTERNAL_SERVER_ERROR,
             CodeHarmonyResponseError::BadRequest(_, _) => StatusCode::BAD_REQUEST,
             CodeHarmonyResponseError::DatabaseConnection => StatusCode::INTERNAL_SERVER_ERROR,
+            CodeHarmonyResponseError::RedisConnection => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 

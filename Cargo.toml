@@ -12,9 +12,12 @@ debug = true
 actix-web = "4.0.0-beta.19"
 actix-session = "0.4"
 actix-redis = "0.9"
-serde = {version = "1.0.130", features = ["derive"]}
+serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.68"
-tokio-postgres = {version = "0.7.5", features = ["with-serde_json-1","with-chrono-0_4"]}
+tokio-postgres = { version = "0.7.5", features = [
+    "with-serde_json-1",
+    "with-chrono-0_4",
+] }
 deadpool-postgres = "0.10.0"
 config = "0.11.0"
 derive_more = "0.99.16"
@@ -24,3 +27,5 @@ wildmatch = "2.1.0"
 pct-str = "1.1.0"
 futures = "0.3.19"
 chrono = "0.4.19"
+deadpool-redis = "0.10.2"
+redis = "0.21.5"

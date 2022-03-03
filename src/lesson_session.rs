@@ -1,6 +1,7 @@
 use actix_web::{get, post, web, HttpRequest, HttpResponse, Responder};
 use chrono::NaiveDateTime;
 use deadpool_postgres::{Object, Pool};
+use deadpool_redis::redis::cmd;
 use futures::join;
 use pct_str::PctStr;
 use serde::Serialize;
@@ -16,7 +17,9 @@ struct SessionInfo {
 
 // Group all of the services together into a single init
 pub fn init(cfg: &mut web::ServiceConfig) {
-    cfg.service(create_session).service(get_session_info);
+    cfg.service(create_session)
+        .service(get_session_info)
+        .service(start_session);
 }
 
 // Request a new session
@@ -163,4 +166,69 @@ async fn get_plan_info_query(
     Ok(SessionInfo {
         date: date.timestamp_millis(),
     })
+}
+
+// Get info about a specific session
+#[post("session/start/{plan_name}/{session_name}")]
+async fn start_session(
+    redis_pool: web::Data<deadpool_redis::Pool>,
+    req: HttpRequest,
+) -> Result<impl Responder, CodeHarmonyResponseError> {
+    let plan_name = match req.match_info().get("plan_name") {
+        Some(plan_name) => PctStr::new(plan_name)
+            .map_err(|_| CodeHarmonyResponseError::BadRequest(1, "Bad plan name".to_string()))?
+            .decode(),
+        None => {
+            return Err(CodeHarmonyResponseError::BadRequest(
+                0,
+                "Expected plan name in uri".to_string(),
+            ))
+        }
+    };
+
+    // Get session name from uri decoding it as well
+    let session_name = match req.match_info().get("session_name") {
+        Some(session_name) => PctStr::new(session_name)
+            .map_err(|_| CodeHarmonyResponseError::BadRequest(1, "Bad plan name".to_string()))?
+            .decode(),
+        None => {
+            return Err(CodeHarmonyResponseError::BadRequest(
+                0,
+                "Expected session name in uri".to_string(),
+            ))
+        }
+    };
+
+    // Get the Redis client
+    let mut client = redis_pool
+        .get()
+        .await
+        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+    // Add the session to the Redis
+    cmd("HSET")
+        .arg(&[
+            "session:hosts:user1",
+            "plan_name",
+            &plan_name,
+            "session_name",
+            &session_name,
+        ])
+        .query_async(&mut client)
+        .await
+        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+    // TODO This is just an example of what a student entry would look like
+    cmd("HSET")
+        .arg(&[
+            &format!("session:{}:{}:user1:student1", &plan_name, &session_name),
+            "solution",
+            "print(\"hello world\")",
+        ])
+        .query_async(&mut client)
+        .await
+        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+    // Return Ok!
+    Ok(HttpResponse::Ok())
 }

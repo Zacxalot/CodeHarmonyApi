@@ -1,3 +1,4 @@
+use actix_redis::RedisSession;
 use actix_web::{get, web, App, HttpResponse, HttpServer, Responder};
 use deadpool_postgres::{ManagerConfig, Pool, RecyclingMethod};
 use tokio_postgres::NoTls;
@@ -20,6 +21,9 @@ async fn main() -> std::io::Result<()> {
     });
     let pool = cfg.create_pool(None, NoTls).unwrap();
 
+    let mut cfg = deadpool_redis::Config::from_url("redis://127.0.0.1:6379");
+    let redis_pool = cfg.create_pool(None).unwrap();
+
     // for row in pool.get().await.unwrap().query("SELECT * FROM USERS",&[]).await.unwrap(){
     //     println!("{:?}",row);
     // }
@@ -32,6 +36,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(pool.clone()))
+            .app_data(web::Data::new(redis_pool.clone()))
             .service(coding_lesson::get_coding_lesson)
             .service(getusers)
             .configure(lesson_plan::init)
