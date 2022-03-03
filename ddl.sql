@@ -56,7 +56,7 @@ CREATE TABLE codeharmony.lesson_plan_section (
 
 INSERT INTO codeharmony.users (username) VALUES('user1');
 INSERT INTO codeharmony.lesson_plan (plan_name, username) VALUES('test', 'user1');
-INSERT INTO codeharmony.lesson_plan_section (plan_name,username,section_elements,section_name,section_type, order_pos) 
+INSERT INTO codeharmony.lesson_plan_section (plan_name,username,section_elements,section_name,section_type, order_pos, coding_data) 
 VALUES('test','user1',
 '[
 	{"elType":"h1","props":{},"children":{"String":"Test"}},
@@ -65,4 +65,5 @@ VALUES('test','user1',
 ]',
 'Introduction',
 'LECTURE',
-0);
+0,
+'{"language":"python", "startingCode":"", "expectedOutput":""}');

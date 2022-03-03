@@ -35,11 +35,20 @@ struct PlanSectionListResponse {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[allow(non_snake_case)]
+pub struct CodingData {
+    language: String,
+    startingCode: String,
+    expectedOutput: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[allow(non_snake_case)]
 pub struct PlanSection {
     name: String,
     sectionType: String,
     elements: Vec<JSXElement>,
     orderPos: i16,
+    codingData: CodingData,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -82,12 +91,14 @@ impl TryFrom<&tokio_postgres::Row> for PlanSection {
             && cols.get(0).unwrap().name() == "section_name"
             && cols.get(1).unwrap().name() == "section_type"
             && cols.get(2).unwrap().name() == "section_elements"
+            && cols.get(3).unwrap().name() == "coding_data"
             && cols.get(4).unwrap().name() == "order_pos"
         {
             return Ok(PlanSection {
                 name: row.try_get::<usize, String>(0)?,
                 sectionType: row.try_get::<usize, String>(1)?,
                 elements: serde_json::from_value(row.try_get::<usize, serde_json::Value>(2)?)?,
+                codingData: serde_json::from_value(row.try_get::<usize, serde_json::Value>(3)?)?,
                 orderPos: row.try_get::<usize, i16>(4)?,
             });
         }
@@ -314,11 +325,15 @@ async fn set_plan_section(
 
     // Get the body as a json string
     let section_json = serde_json::to_value(&section.elements).map_err(|_| {
-        CodeHarmonyResponseError::BadRequest(1, "Couldn't serialise json".to_string())
+        CodeHarmonyResponseError::BadRequest(1, "Couldn't serialise elements".to_string())
+    })?;
+
+    let coding_data = serde_json::to_value(&section.codingData).map_err(|_| {
+        CodeHarmonyResponseError::BadRequest(1, "Couldn't serialise coding data".to_string())
     })?;
 
     // Send the update query with the new section json data
-    client.query("UPDATE codeharmony.lesson_plan_section SET section_elements = $1, order_pos = $2 WHERE plan_name = $3 and section_name=$4 and username='user1'",&[&section_json,&section.orderPos,&plan_name,&section.name]).await
+    client.query("UPDATE codeharmony.lesson_plan_section SET section_elements = $1, order_pos = $2, coding_data = $5 WHERE plan_name = $3 and section_name=$4 and username='user1'",&[&section_json,&section.orderPos,&plan_name,&section.name,&coding_data]).await
           .map_err(|e| {println!("{:?}",e);CodeHarmonyResponseError::InternalError(1,"Couldn't update database".to_string())})?;
 
     // Return Ok!
