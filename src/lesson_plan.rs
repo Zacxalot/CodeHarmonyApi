@@ -69,7 +69,8 @@ pub fn init(cfg: &mut web::ServiceConfig) {
         .service(get_plan_info)
         .service(set_plan_section)
         .service(perform_plan_operation)
-        .service(update_plan_section_name);
+        .service(update_plan_section_name)
+        .service(update_plan_section_type);
 }
 
 impl TryFrom<&tokio_postgres::Row> for PlanSection {
@@ -279,11 +280,6 @@ async fn update_plan_section_name(
         }
     };
 
-    println!(
-        "{} -> {}",
-        section_names.old_section_name, section_names.new_section_name
-    );
-
     client.query("UPDATE codeharmony.lesson_plan_section SET section_name = $1 WHERE section_name = $2 and plan_name = $3 and username = $4",
     &[&section_names.new_section_name,&section_names.old_section_name, &plan_name, &"user1".to_string()]).await
         .map_err(|e| {println!("{:?}",e);CodeHarmonyResponseError::InternalError(1,"Couldn't update database".to_string())})?;
@@ -363,5 +359,50 @@ async fn perform_plan_operation(
               .map_err(|e| {println!("{:?}",e);CodeHarmonyResponseError::InternalError(2,"Couldn't add section".to_string())})?;
     }
 
+    Ok(HttpResponse::Ok())
+}
+
+#[derive(Deserialize)]
+#[allow(non_snake_case)]
+struct UpdateTypeJSON {
+    section_name: String,
+    new_type: String,
+}
+
+// Update section type
+#[put("/plan/info/{plan_name}/update-type")]
+async fn update_plan_section_type(
+    db_pool: web::Data<Pool>,
+    req: HttpRequest,
+    update_details: web::Json<UpdateTypeJSON>,
+) -> Result<impl Responder, CodeHarmonyResponseError> {
+    // Get db client
+    let client = db_pool
+        .get()
+        .await
+        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+    // Get plan name from uri
+    let plan_name = match req.match_info().get("plan_name") {
+        Some(plan_name) => plan_name,
+        None => {
+            return Err(CodeHarmonyResponseError::BadRequest(
+                0,
+                "Expected plan name in uri".to_string(),
+            ))
+        }
+    };
+
+    let new_type = if update_details.new_type.starts_with('L') {
+        "LECTURE "
+    } else {
+        "CODING  "
+    };
+
+    client.query("UPDATE codeharmony.lesson_plan_section SET section_type = $1 WHERE section_name = $2 and plan_name = $3 and username = $4",
+    &[&new_type, &update_details.section_name, &plan_name, &"user1"]).await
+        .map_err(|e| {println!("{:?}",e);CodeHarmonyResponseError::InternalError(1,"Couldn't update database".to_string())})?;
+
+    // Return Ok!
     Ok(HttpResponse::Ok())
 }
