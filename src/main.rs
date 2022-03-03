@@ -1,5 +1,8 @@
-use actix_redis::RedisSession;
-use actix_web::{get, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{
+    get,
+    web::{self},
+    App, HttpResponse, HttpServer, Responder,
+};
 use deadpool_postgres::{ManagerConfig, Pool, RecyclingMethod};
 use tokio_postgres::NoTls;
 
@@ -11,6 +14,7 @@ mod lesson_session;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    // Setup Postgres pool
     let mut cfg = deadpool_postgres::Config::new();
     cfg.dbname = Some("postgres".to_string());
     cfg.user = Some("postgres".to_string());
@@ -19,23 +23,16 @@ async fn main() -> std::io::Result<()> {
     cfg.manager = Some(ManagerConfig {
         recycling_method: RecyclingMethod::Fast,
     });
-    let pool = cfg.create_pool(None, NoTls).unwrap();
+    let postgres_pool = cfg.create_pool(None, NoTls).unwrap();
 
-    let mut cfg = deadpool_redis::Config::from_url("redis://127.0.0.1:6379");
+    // Setup redis pool
+    let cfg = deadpool_redis::Config::from_url("redis://127.0.0.1:6379");
     let redis_pool = cfg.create_pool(None).unwrap();
-
-    // for row in pool.get().await.unwrap().query("SELECT * FROM USERS",&[]).await.unwrap(){
-    //     println!("{:?}",row);
-    // }
-
-    //Configure DB Connection
-    // let mut cfg = Config::from_env().unwrap();
-    // let pool = cfg.pg.create_pool(NoTls).unwrap();
 
     //Create and start server
     HttpServer::new(move || {
         App::new()
-            .app_data(web::Data::new(pool.clone()))
+            .app_data(web::Data::new(postgres_pool.clone()))
             .app_data(web::Data::new(redis_pool.clone()))
             .service(coding_lesson::get_coding_lesson)
             .service(getusers)

@@ -4,7 +4,7 @@ use deadpool_postgres::{Object, Pool};
 use deadpool_redis::redis::cmd;
 use futures::join;
 use pct_str::PctStr;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio_postgres::error::SqlState;
 
@@ -19,7 +19,8 @@ struct SessionInfo {
 pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(create_session)
         .service(get_session_info)
-        .service(start_session);
+        .service(start_session)
+        .service(save_code);
 }
 
 // Request a new session
@@ -168,8 +169,8 @@ async fn get_plan_info_query(
     })
 }
 
-// Get info about a specific session
-#[post("session/start/{plan_name}/{session_name}")]
+// Start a session
+#[post("session/start/{plan_name}/{session_name}/{section_name}")]
 async fn start_session(
     redis_pool: web::Data<deadpool_redis::Pool>,
     req: HttpRequest,
@@ -199,6 +200,19 @@ async fn start_session(
         }
     };
 
+    // Get section name from uri decoding it as well
+    let section_name = match req.match_info().get("section_name") {
+        Some(section_name) => PctStr::new(section_name)
+            .map_err(|_| CodeHarmonyResponseError::BadRequest(1, "Bad plan name".to_string()))?
+            .decode(),
+        None => {
+            return Err(CodeHarmonyResponseError::BadRequest(
+                0,
+                "Expected section name in uri".to_string(),
+            ))
+        }
+    };
+
     // Get the Redis client
     let mut client = redis_pool
         .get()
@@ -218,12 +232,75 @@ async fn start_session(
         .await
         .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
+    // Return Ok!
+    Ok(HttpResponse::Ok())
+}
+
+#[derive(Deserialize)]
+struct SaveCode {
+    text: String,
+}
+
+// Save code to redis
+#[post("session/save/{host}/{plan_name}/{session_name}/{section_name}")]
+async fn save_code(
+    redis_pool: web::Data<deadpool_redis::Pool>,
+    req: HttpRequest,
+    payload: web::Json<SaveCode>,
+) -> Result<impl Responder, CodeHarmonyResponseError> {
+    let plan_name = match req.match_info().get("plan_name") {
+        Some(plan_name) => PctStr::new(plan_name)
+            .map_err(|_| CodeHarmonyResponseError::BadRequest(1, "Bad plan name".to_string()))?
+            .decode(),
+        None => {
+            return Err(CodeHarmonyResponseError::BadRequest(
+                0,
+                "Expected plan name in uri".to_string(),
+            ))
+        }
+    };
+
+    // Get session name from uri decoding it as well
+    let session_name = match req.match_info().get("session_name") {
+        Some(session_name) => PctStr::new(session_name)
+            .map_err(|_| CodeHarmonyResponseError::BadRequest(1, "Bad plan name".to_string()))?
+            .decode(),
+        None => {
+            return Err(CodeHarmonyResponseError::BadRequest(
+                0,
+                "Expected session name in uri".to_string(),
+            ))
+        }
+    };
+
+    // Get section name from uri decoding it as well
+    let section_name = match req.match_info().get("section_name") {
+        Some(section_name) => PctStr::new(section_name)
+            .map_err(|_| CodeHarmonyResponseError::BadRequest(1, "Bad plan name".to_string()))?
+            .decode(),
+        None => {
+            return Err(CodeHarmonyResponseError::BadRequest(
+                0,
+                "Expected section name in uri".to_string(),
+            ))
+        }
+    };
+
+    // Get the Redis client
+    let mut client = redis_pool
+        .get()
+        .await
+        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
     // TODO This is just an example of what a student entry would look like
     cmd("HSET")
         .arg(&[
-            &format!("session:{}:{}:user1:student1", &plan_name, &session_name),
+            &format!(
+                "session:sessions:user1:{}:{}:{}:student1",
+                plan_name, session_name, section_name
+            ),
             "solution",
-            "print(\"hello world\")",
+            &payload.text,
         ])
         .query_async(&mut client)
         .await
