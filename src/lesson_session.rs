@@ -27,33 +27,10 @@ pub fn init(cfg: &mut web::ServiceConfig) {
 #[post("/session/new/{plan_name}/{session_name}")]
 async fn create_session(
     db_pool: web::Data<Pool>,
-    req: HttpRequest,
+    path: web::Path<(String, String)>,
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
-    // Get plan name from uri decoding it as well
-    let plan_name = match req.match_info().get("plan_name") {
-        Some(plan_name) => PctStr::new(plan_name)
-            .map_err(|_| CodeHarmonyResponseError::BadRequest(1, "Bad plan name".to_string()))?
-            .decode(),
-        None => {
-            return Err(CodeHarmonyResponseError::BadRequest(
-                0,
-                "Expected plan name in uri".to_string(),
-            ))
-        }
-    };
-
-    // Get session name from uri decoding it as well
-    let session_name = match req.match_info().get("session_name") {
-        Some(session_name) => PctStr::new(session_name)
-            .map_err(|_| CodeHarmonyResponseError::BadRequest(1, "Bad plan name".to_string()))?
-            .decode(),
-        None => {
-            return Err(CodeHarmonyResponseError::BadRequest(
-                0,
-                "Expected session name in uri".to_string(),
-            ))
-        }
-    };
+    // Get vars from path
+    let (plan_name, session_name) = path.into_inner();
 
     // Get db client
     let mut client = db_pool
@@ -98,33 +75,10 @@ async fn create_session(
 #[get("session/info/{plan_name}/{session_name}")]
 async fn get_session_info(
     db_pool: web::Data<Pool>,
-    req: HttpRequest,
+    path: web::Path<(String, String)>,
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
-    // Get plan name from uri decoding it as well
-    let plan_name = match req.match_info().get("plan_name") {
-        Some(plan_name) => PctStr::new(plan_name)
-            .map_err(|_| CodeHarmonyResponseError::BadRequest(1, "Bad plan name".to_string()))?
-            .decode(),
-        None => {
-            return Err(CodeHarmonyResponseError::BadRequest(
-                0,
-                "Expected plan name in uri".to_string(),
-            ))
-        }
-    };
-
-    // Get session name from uri decoding it as well
-    let session_name = match req.match_info().get("session_name") {
-        Some(session_name) => PctStr::new(session_name)
-            .map_err(|_| CodeHarmonyResponseError::BadRequest(1, "Bad plan name".to_string()))?
-            .decode(),
-        None => {
-            return Err(CodeHarmonyResponseError::BadRequest(
-                0,
-                "Expected session name in uri".to_string(),
-            ))
-        }
-    };
+    // Get vars from path
+    let (plan_name, session_name) = path.into_inner();
 
     // Get db client
     let client = db_pool
@@ -173,45 +127,10 @@ async fn get_plan_info_query(
 #[post("session/start/{plan_name}/{session_name}/{section_name}")]
 async fn start_session(
     redis_pool: web::Data<deadpool_redis::Pool>,
-    req: HttpRequest,
+    path: web::Path<(String, String, String)>,
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
-    let plan_name = match req.match_info().get("plan_name") {
-        Some(plan_name) => PctStr::new(plan_name)
-            .map_err(|_| CodeHarmonyResponseError::BadRequest(1, "Bad plan name".to_string()))?
-            .decode(),
-        None => {
-            return Err(CodeHarmonyResponseError::BadRequest(
-                0,
-                "Expected plan name in uri".to_string(),
-            ))
-        }
-    };
-
-    // Get session name from uri decoding it as well
-    let session_name = match req.match_info().get("session_name") {
-        Some(session_name) => PctStr::new(session_name)
-            .map_err(|_| CodeHarmonyResponseError::BadRequest(1, "Bad plan name".to_string()))?
-            .decode(),
-        None => {
-            return Err(CodeHarmonyResponseError::BadRequest(
-                0,
-                "Expected session name in uri".to_string(),
-            ))
-        }
-    };
-
-    // Get section name from uri decoding it as well
-    let section_name = match req.match_info().get("section_name") {
-        Some(section_name) => PctStr::new(section_name)
-            .map_err(|_| CodeHarmonyResponseError::BadRequest(1, "Bad plan name".to_string()))?
-            .decode(),
-        None => {
-            return Err(CodeHarmonyResponseError::BadRequest(
-                0,
-                "Expected section name in uri".to_string(),
-            ))
-        }
-    };
+    // Get vars from path
+    let (plan_name, session_name, section_name) = path.into_inner();
 
     // Get the Redis client
     let mut client = redis_pool
@@ -227,6 +146,8 @@ async fn start_session(
             &plan_name,
             "session_name",
             &session_name,
+            "section_name",
+            &section_name,
         ])
         .query_async(&mut client)
         .await
@@ -245,46 +166,11 @@ struct SaveCode {
 #[post("session/save/{host}/{plan_name}/{session_name}/{section_name}")]
 async fn save_code(
     redis_pool: web::Data<deadpool_redis::Pool>,
-    req: HttpRequest,
+    path: web::Path<(String, String, String)>,
     payload: web::Json<SaveCode>,
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
-    let plan_name = match req.match_info().get("plan_name") {
-        Some(plan_name) => PctStr::new(plan_name)
-            .map_err(|_| CodeHarmonyResponseError::BadRequest(1, "Bad plan name".to_string()))?
-            .decode(),
-        None => {
-            return Err(CodeHarmonyResponseError::BadRequest(
-                0,
-                "Expected plan name in uri".to_string(),
-            ))
-        }
-    };
-
-    // Get session name from uri decoding it as well
-    let session_name = match req.match_info().get("session_name") {
-        Some(session_name) => PctStr::new(session_name)
-            .map_err(|_| CodeHarmonyResponseError::BadRequest(1, "Bad plan name".to_string()))?
-            .decode(),
-        None => {
-            return Err(CodeHarmonyResponseError::BadRequest(
-                0,
-                "Expected session name in uri".to_string(),
-            ))
-        }
-    };
-
-    // Get section name from uri decoding it as well
-    let section_name = match req.match_info().get("section_name") {
-        Some(section_name) => PctStr::new(section_name)
-            .map_err(|_| CodeHarmonyResponseError::BadRequest(1, "Bad plan name".to_string()))?
-            .decode(),
-        None => {
-            return Err(CodeHarmonyResponseError::BadRequest(
-                0,
-                "Expected section name in uri".to_string(),
-            ))
-        }
-    };
+    // Get vars from path
+    let (plan_name, session_name, section_name) = path.into_inner();
 
     // Get the Redis client
     let mut client = redis_pool
@@ -292,7 +178,7 @@ async fn save_code(
         .await
         .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
-    // TODO This is just an example of what a student entry would look like
+    // Save code to hashset
     cmd("HSET")
         .arg(&[
             &format!(
