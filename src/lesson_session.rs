@@ -215,28 +215,6 @@ struct ActiveSession {
     session_date: NaiveDateTime,
 }
 
-// impl TryFrom<&tokio_postgres::Row> for ActiveSession {
-//     type Error = Box<dyn std::error::Error>;
-//     fn try_from(row: &tokio_postgres::row::Row) -> Result<Self, Self::Error> {
-//         let cols = row.columns();
-
-//         let names = cols.iter().map(|col| col.name()).collect::<HashSet<&str>>();
-//         println!("{:?}", names);
-//         if names.contains("plan_name")
-//             && names.contains("session_name")
-//             && names.contains("username")
-//         {
-//             return Ok(ActiveSession {
-//                 session_name: row.try_get::<&str, String>("session_name")?,
-//                 plan_name: row.try_get::<&str, String>("plan_name")?,
-//                 username: row.try_get::<&str, String>("username")?,
-//                 session_date: row.try_get::<&str, u32>("session_date")?,
-//             });
-//         }
-//         Err(Box::from("Invalid Row"))
-//     }
-// }
-
 // Get active sessions for student
 #[get("session/active")]
 async fn get_active_sessions_for_user(

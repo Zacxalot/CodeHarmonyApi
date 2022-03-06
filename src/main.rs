@@ -1,3 +1,4 @@
+use actix::Actor;
 use actix_web::{
     get,
     web::{self},
@@ -11,6 +12,7 @@ mod error;
 mod jsx_element;
 mod lesson_plan;
 mod lesson_session;
+mod ws_server;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -29,13 +31,18 @@ async fn main() -> std::io::Result<()> {
     let cfg = deadpool_redis::Config::from_url("redis://127.0.0.1:6379");
     let redis_pool = cfg.create_pool(None).unwrap();
 
+    // Setup lesson session server
+    let server = ws_server::SessionServer::new().start();
+
     //Create and start server
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(postgres_pool.clone()))
             .app_data(web::Data::new(redis_pool.clone()))
+            .app_data(server.clone())
             .service(coding_lesson::get_coding_lesson)
             .service(getusers)
+            .route("/ws", web::get().to(ws_server::session_service))
             .configure(lesson_plan::init)
             .configure(lesson_session::init)
     })
