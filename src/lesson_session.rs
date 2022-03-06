@@ -1,14 +1,23 @@
+use std::{
+    collections::{HashMap, HashSet},
+    convert::{TryFrom, TryInto},
+};
+
 use actix_web::{get, post, web, HttpRequest, HttpResponse, Responder};
-use chrono::NaiveDateTime;
+use chrono::{NaiveDateTime, Utc};
 use deadpool_postgres::{Object, Pool};
 use deadpool_redis::redis::cmd;
 use futures::join;
 use pct_str::PctStr;
+use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tokio_postgres::error::SqlState;
+use tokio_postgres::{error::SqlState, types::Timestamp};
 
-use crate::{error::CodeHarmonyResponseError, lesson_plan};
+use crate::{
+    error::CodeHarmonyResponseError,
+    lesson_plan::{self, get_plan_info_query},
+};
 
 #[derive(Serialize)]
 struct SessionInfo {
@@ -20,7 +29,8 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(create_session)
         .service(get_session_info)
         .service(start_session)
-        .service(save_code);
+        .service(save_code)
+        .service(get_active_sessions_for_user);
 }
 
 // Request a new session
@@ -87,8 +97,8 @@ async fn get_session_info(
         .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
     // Get data
-    let plan_future = lesson_plan::get_plan_info_query(&client, &plan_name);
-    let session_future = get_plan_info_query(&client, &plan_name, &session_name);
+    let plan_future = get_plan_info_query(&client, &plan_name);
+    let session_future = get_session_info_query(&client, &plan_name, &session_name);
 
     // Wait for both futures at once
     let (plan_info_result, session_info_result) = join!(plan_future, session_future);
@@ -101,7 +111,8 @@ async fn get_session_info(
                                 "session":session_info})))
 }
 
-async fn get_plan_info_query(
+// Get session infro
+async fn get_session_info_query(
     client: &Object,
     plan_name: &str,
     session_name: &str,
@@ -139,7 +150,7 @@ async fn start_session(
         .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
     // Add the session to the Redis
-    cmd("HSET")
+    cmd("SET")
         .arg(&[
             "session:hosts:user1",
             "plan_name",
@@ -166,11 +177,11 @@ struct SaveCode {
 #[post("session/save/{host}/{plan_name}/{session_name}/{section_name}")]
 async fn save_code(
     redis_pool: web::Data<deadpool_redis::Pool>,
-    path: web::Path<(String, String, String)>,
+    path: web::Path<(String, String, String, String)>,
     payload: web::Json<SaveCode>,
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
     // Get vars from path
-    let (plan_name, session_name, section_name) = path.into_inner();
+    let (host, plan_name, session_name, section_name) = path.into_inner();
 
     // Get the Redis client
     let mut client = redis_pool
@@ -182,8 +193,8 @@ async fn save_code(
     cmd("HSET")
         .arg(&[
             &format!(
-                "session:sessions:user1:{}:{}:{}:student1",
-                plan_name, session_name, section_name
+                "session:sessions:{}:{}:{}:{}:student1",
+                host, plan_name, session_name, section_name
             ),
             "solution",
             &payload.text,
@@ -194,4 +205,70 @@ async fn save_code(
 
     // Return Ok!
     Ok(HttpResponse::Ok())
+}
+
+#[derive(pg_mapper::TryFromRow, Serialize)]
+struct ActiveSession {
+    session_name: String,
+    plan_name: String,
+    username: String,
+    session_date: NaiveDateTime,
+}
+
+// impl TryFrom<&tokio_postgres::Row> for ActiveSession {
+//     type Error = Box<dyn std::error::Error>;
+//     fn try_from(row: &tokio_postgres::row::Row) -> Result<Self, Self::Error> {
+//         let cols = row.columns();
+
+//         let names = cols.iter().map(|col| col.name()).collect::<HashSet<&str>>();
+//         println!("{:?}", names);
+//         if names.contains("plan_name")
+//             && names.contains("session_name")
+//             && names.contains("username")
+//         {
+//             return Ok(ActiveSession {
+//                 session_name: row.try_get::<&str, String>("session_name")?,
+//                 plan_name: row.try_get::<&str, String>("plan_name")?,
+//                 username: row.try_get::<&str, String>("username")?,
+//                 session_date: row.try_get::<&str, u32>("session_date")?,
+//             });
+//         }
+//         Err(Box::from("Invalid Row"))
+//     }
+// }
+
+// Get active sessions for student
+#[get("session/active")]
+async fn get_active_sessions_for_user(
+    db_pool: web::Data<Pool>,
+) -> Result<impl Responder, CodeHarmonyResponseError> {
+    // Get db client
+    let client = db_pool
+        .get()
+        .await
+        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+    let username = "user1";
+
+    const STATEMENT:&str = "select session_name,plan_name,username,session_date from codeharmony.lesson_session
+join codeharmony.student_teacher on codeharmony.lesson_session.username = codeharmony.student_teacher.teacher_un 
+where codeharmony.student_teacher.student_un = $1 or codeharmony.student_teacher.teacher_un = $1";
+
+    // Get rows from database
+    let rows = client.query(STATEMENT, &[&username]).await.map_err(|e| {
+        println!("{:?}", e);
+        CodeHarmonyResponseError::InternalError(1, "Couldn't get rows from database".to_string())
+    })?;
+
+    let sessions = rows
+        .into_iter()
+        .map(ActiveSession::try_from)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| {
+            println!("{:?}", e);
+            CodeHarmonyResponseError::InternalError(0, "Invalid rows".to_string())
+        })?;
+
+    // Return Ok!
+    Ok(HttpResponse::Ok().json(sessions))
 }
