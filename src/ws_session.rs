@@ -21,7 +21,6 @@ impl Actor for WsClientSession {
 // Handles messages from clients
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsClientSession {
     fn handle(&mut self, item: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
-        println!("Message");
         let msg = match item {
             Err(_) => {
                 ctx.stop();
@@ -32,6 +31,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsClientSession {
 
         match msg {
             ws::Message::Text(text) => {
+                println!("{:?}", &text);
                 let split: Vec<&str> = text.splitn(2, ' ').collect();
                 if split.len() == 2 {
                     let addr = ctx.address().recipient::<WSResponse>();

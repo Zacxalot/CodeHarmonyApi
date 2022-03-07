@@ -81,7 +81,14 @@ impl Handler<TeacherJoin> for SessionServer {
     type Result = ();
 
     fn handle(&mut self, msg: TeacherJoin, ctx: &mut Self::Context) -> Self::Result {
-        if let std::collections::hash_map::Entry::Vacant(e) = self.sessions.entry(msg.identifier) {
+        if let std::collections::hash_map::Entry::Vacant(e) =
+            self.sessions.entry(msg.identifier.clone())
+        {
+            // Set the room address in the teacher connection
+            msg.addr
+                .do_send(WSResponse::SetConnectedSession(msg.identifier));
+
+            // Set to room owner
             e.insert(SessionRoom::new(msg.addr));
         }
         println!("Teacher started session")
