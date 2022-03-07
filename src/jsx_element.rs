@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+#[allow(non_snake_case)]
 #[derive(Deserialize, Serialize, Debug)]
 pub struct JSXElement {
     pub elType: ElementType,

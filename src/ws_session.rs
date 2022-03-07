@@ -13,7 +13,7 @@ pub struct WsClientSession {
 impl Actor for WsClientSession {
     type Context = ws::WebsocketContext<Self>;
 
-    fn started(&mut self, ctx: &mut Self::Context) {
+    fn started(&mut self, _: &mut Self::Context) {
         println!("New Connection");
     }
 }

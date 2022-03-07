@@ -1,9 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use actix::{
-    clock::Instant, Actor, ActorContext, Addr, AsyncContext, Context, Handler, Message, Recipient,
-    StreamHandler,
-};
+use actix::{Actor, Addr, Context, Handler, Message, Recipient};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 
@@ -24,6 +21,7 @@ pub async fn session_service(
     )
 }
 
+#[allow(dead_code)]
 pub struct SessionRoom {
     teacher_address: Recipient<WSResponse>,
     student_addresses: HashSet<Recipient<WSResponse>>,
@@ -46,7 +44,7 @@ pub struct SessionServer {
 
 impl SessionServer {
     pub fn new() -> SessionServer {
-        let mut sessions: HashMap<SessionIdentifier, SessionRoom> = HashMap::new();
+        let sessions: HashMap<SessionIdentifier, SessionRoom> = HashMap::new();
         SessionServer { sessions }
     }
 }
@@ -80,7 +78,7 @@ pub struct TeacherJoin {
 impl Handler<TeacherJoin> for SessionServer {
     type Result = ();
 
-    fn handle(&mut self, msg: TeacherJoin, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: TeacherJoin, _: &mut Self::Context) -> Self::Result {
         if let std::collections::hash_map::Entry::Vacant(e) =
             self.sessions.entry(msg.identifier.clone())
         {
@@ -105,18 +103,14 @@ pub struct StudentJoin {
 impl Handler<StudentJoin> for SessionServer {
     type Result = ();
 
-    fn handle(&mut self, msg: StudentJoin, ctx: &mut Self::Context) -> Self::Result {
-        println!("Printing sessions");
-        for (session, room) in self.sessions.iter() {
-            println!("---{:?}", session);
-        }
-
-        println!("{:?}", &msg.identifier);
-
+    fn handle(&mut self, msg: StudentJoin, _: &mut Self::Context) -> Self::Result {
+        // If the room exists,
         if let Some(session) = self.sessions.get_mut(&msg.identifier) {
+            // set the address in the students connection
             msg.addr
                 .do_send(WSResponse::SetConnectedSession(msg.identifier));
             println!("Student joined session");
+            // And insert the student into the list
             session.student_addresses.insert(msg.addr);
         }
     }
@@ -132,22 +126,19 @@ pub struct ControlInstruction {
 impl Handler<ControlInstruction> for SessionServer {
     type Result = ();
 
-    fn handle(&mut self, msg: ControlInstruction, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: ControlInstruction, _: &mut Self::Context) -> Self::Result {
         let instruction: Vec<&str> = msg.instruction.split(' ').collect();
-        println!("SPLIT INSTRUCTION");
-        #[allow(clippy::collapsible_if)]
-        if !instruction.is_empty() {
-            println!("INSTRUCTION NOT EMPTY");
-            if instruction[0] == "setSection" && instruction.len() == 2 {
-                println!("SETTING SECTION");
-                if let Ok(new_value) = instruction[1].parse::<usize>() {
-                    if let Some(session) = self.sessions.get_mut(&msg.identifier) {
-                        session.current_section = new_value;
-                        let msg = format!("sec {}", new_value);
-                        for student in session.student_addresses.iter() {
-                            student.do_send(WSResponse::Msg(msg.to_owned()));
-                            println!("Sent instruction");
-                        }
+
+        // If setSection, get new value and session room
+        // Set current_section val and send the msg to students in room
+        if instruction.len() == 2 && instruction[0] == "setSection" {
+            if let Ok(new_value) = instruction[1].parse::<usize>() {
+                if let Some(session) = self.sessions.get_mut(&msg.identifier) {
+                    session.current_section = new_value;
+                    let msg = format!("sec {}", new_value);
+                    for student in session.student_addresses.iter() {
+                        student.do_send(WSResponse::Msg(msg.to_owned()));
+                        println!("Sent instruction");
                     }
                 }
             }

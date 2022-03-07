@@ -5,7 +5,6 @@ use deadpool_postgres::{Object, Pool};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::convert::TryFrom;
-use std::string;
 use tokio_postgres::error::SqlState;
 use tokio_postgres::Row;
 

@@ -1,23 +1,15 @@
-use std::{
-    collections::{HashMap, HashSet},
-    convert::{TryFrom, TryInto},
-};
+use std::convert::TryFrom;
 
-use actix_web::{get, post, web, HttpRequest, HttpResponse, Responder};
-use chrono::{NaiveDateTime, Utc};
+use actix_web::{get, post, web, HttpResponse, Responder};
+use chrono::NaiveDateTime;
 use deadpool_postgres::{Object, Pool};
 use deadpool_redis::redis::cmd;
 use futures::join;
-use pct_str::PctStr;
-use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tokio_postgres::{error::SqlState, types::Timestamp};
+use tokio_postgres::error::SqlState;
 
-use crate::{
-    error::CodeHarmonyResponseError,
-    lesson_plan::{self, get_plan_info_query},
-};
+use crate::{error::CodeHarmonyResponseError, lesson_plan::get_plan_info_query};
 
 #[derive(Serialize)]
 struct SessionInfo {

@@ -5,6 +5,7 @@ use actix_web::{
 };
 use thiserror::Error;
 
+#[allow(dead_code)]
 #[derive(Error, Debug)]
 pub enum CodeHarmonyResponseError {
     #[error("{{\"errcode\": {0}, \"msg\": \"{1}\"}}")]
