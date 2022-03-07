@@ -13,6 +13,7 @@ mod jsx_element;
 mod lesson_plan;
 mod lesson_session;
 mod ws_server;
+mod ws_session;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -39,7 +40,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(web::Data::new(postgres_pool.clone()))
             .app_data(web::Data::new(redis_pool.clone()))
-            .app_data(server.clone())
+            .app_data(web::Data::new(server.clone()))
             .service(coding_lesson::get_coding_lesson)
             .service(getusers)
             .route("/ws", web::get().to(ws_server::session_service))

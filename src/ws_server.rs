@@ -1,77 +1,100 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use actix::{clock::Instant, Actor, ActorContext, Addr, AsyncContext, Context, StreamHandler};
+use actix::{
+    clock::Instant, Actor, ActorContext, Addr, AsyncContext, Context, Handler, Message, Recipient,
+    StreamHandler,
+};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
+
+use crate::ws_session::WsClientSession;
 
 pub async fn session_service(
     req: HttpRequest,
     stream: web::Payload,
+    srv: web::Data<Addr<SessionServer>>,
 ) -> Result<HttpResponse, Error> {
-    ws::start(WsClientSession {}, &req, stream)
+    ws::start(
+        WsClientSession {
+            addr: srv.get_ref().clone(),
+        },
+        &req,
+        stream,
+    )
 }
 
-struct WsClientSession {}
-
-impl Actor for WsClientSession {
-    type Context = ws::WebsocketContext<Self>;
-
-    fn started(&mut self, ctx: &mut Self::Context) {
-        println!("Hi world");
-    }
+pub struct SessionRoom {
+    student_addresses: HashSet<Recipient<Msg>>,
 }
 
-// Handles messages from clients
-impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsClientSession {
-    fn handle(&mut self, item: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
-        println!("Message");
-        let msg = match item {
-            Err(_) => {
-                ctx.stop();
-                return;
-            }
-            Ok(item) => item,
-        };
-
-        match msg {
-            // ws::Message::Ping(_) => self.heartbeat = Instant::now(),
-            ws::Message::Text(text) => {
-                let split: Vec<&str> = text.splitn(2, ' ').collect();
-                if split.len() == 2 {
-                    match split[0] {
-                        "sPos" => {
-                            println!("Setting pos")
-                        }
-                        _ => {}
-                    }
-                }
-
-                println!("msg is tasty");
-                println!("{}", text);
-            }
-            ws::Message::Close(reason) => {
-                ctx.close(reason);
-                ctx.stop();
-            }
-            ws::Message::Continuation(_) => {
-                ctx.stop();
-            }
-            _ => ctx.text("What do you call this?"),
+impl SessionRoom {
+    fn new() -> Self {
+        Self {
+            student_addresses: HashSet::new(),
         }
     }
 }
 
 pub struct SessionServer {
-    sessions: HashMap<usize, usize>,
+    sessions: HashMap<SessionIdentifier, SessionRoom>,
 }
 
 impl SessionServer {
     pub fn new() -> SessionServer {
-        let mut sessions: HashMap<usize, usize> = HashMap::new();
-        SessionServer { sessions: sessions }
+        let mut sessions: HashMap<SessionIdentifier, SessionRoom> = HashMap::new();
+        SessionServer { sessions }
     }
 }
 
 impl Actor for SessionServer {
     type Context = Context<Self>;
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct SessionIdentifier {
+    plan_name: String,
+    session_name: String,
+    host: String,
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct Msg(pub String);
+
+// Connect to server
+// Join session room
+#[derive(Message, Debug)]
+#[rtype(result = "()")]
+struct Connect {
+    addr: Recipient<Msg>,
+}
+
+// Join session room
+#[derive(Message, Debug)]
+#[rtype(result = "()")]
+struct Join {
+    identifier: SessionIdentifier,
+    addr: Recipient<Msg>,
+}
+
+impl Handler<Join> for SessionServer {
+    type Result = ();
+
+    fn handle(&mut self, msg: Join, ctx: &mut Self::Context) -> Self::Result {
+        // println!("Join heard - {:?}", msg);
+        // match self.sessions.get_mut(&msg.identifier) {
+        //     Some(room) => {
+        //         room.student_addresses.insert(msg.addr);
+        //     }
+        //     None => {
+        //         self.sessions.insert(msg.identifier, SessionRoom::new());
+        //         self.sessions
+        //             .get_mut(&msg.identifier)
+        //             .unwrap()
+        //             .student_addresses
+        //             .insert(msg.addr);
+        //     }
+        // }
+        // let room_option = self.sessions.get_mut(&msg.identifier);
+    }
 }
