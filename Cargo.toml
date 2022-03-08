@@ -11,7 +11,7 @@ debug = true
 [dependencies]
 actix = "0.13.0"
 actix-web = "4.0.0-beta.19"
-actix-session = "0.4"
+actix-session = "0.5.0"
 actix-redis = "0.9"
 actix-web-actors = "4.1.0"
 serde = { version = "1.0.130", features = ["derive"] }
@@ -32,3 +32,4 @@ chrono = { version = "0.4.19", features = ["serde"] }
 deadpool-redis = "0.10.2"
 redis = "0.21.5"
 pg_mapper = "0.2.0"
+argon2 = "0.3.4"

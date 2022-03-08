@@ -8,6 +8,8 @@ DROP TABLE IF EXISTS codeharmony.users;
 
 CREATE TABLE codeharmony.users (
 	username VARCHAR(32) NOT NULL UNIQUE,
+	hash CHAR(96) not null,
+	email VARCHAR(32) not null unique,
 
 	CONSTRAINT users_pk PRIMARY KEY (username),
     CONSTRAINT username_min_length CHECK (length(username) >= 3)
@@ -64,11 +66,11 @@ CREATE TABLE codeharmony.student_teacher(
 	CONSTRAINT student_un_fk FOREIGN KEY (student_un) REFERENCES codeharmony.users(username)
 );
 
-INSERT INTO codeharmony.users (username) VALUES('user1');
-INSERT INTO codeharmony.users (username) VALUES('SamG');
-INSERT INTO codeharmony.users (username) VALUES('AlG');
-INSERT INTO codeharmony.users (username) VALUES('FergieF');
-INSERT INTO codeharmony.student_teacher (student_un, teacher_un) VALUES('SamG', 'user1');
+INSERT INTO codeharmony.users (username,hash,email) VALUES('user1','$argon2id$v=19$m=4096,t=3,p=1$mthVV+FY4YjPzyui4crAUA$0Hp4NgFmf4fLJzrtyitrUYUxL07HDCMax0/9HX9TEps','zacxalot@gmail.com');
+--INSERT INTO codeharmony.users (username) VALUES('SamG');
+--INSERT INTO codeharmony.users (username) VALUES('AlG');
+--INSERT INTO codeharmony.users (username) VALUES('FergieF');
+--INSERT INTO codeharmony.student_teacher (student_un, teacher_un) VALUES('SamG', 'user1');
 INSERT INTO codeharmony.lesson_plan (plan_name, username) VALUES('test', 'user1');
 INSERT INTO codeharmony.lesson_plan_section (plan_name,username,section_elements,section_name,section_type, order_pos, coding_data) 
 VALUES('test','user1',

@@ -1,4 +1,5 @@
 use actix::Actor;
+use actix_session::CookieSession;
 use actix_web::{
     get,
     web::{self},
@@ -7,6 +8,7 @@ use actix_web::{
 use deadpool_postgres::{ManagerConfig, Pool, RecyclingMethod};
 use tokio_postgres::NoTls;
 
+mod account_management;
 mod coding_lesson;
 mod error;
 mod jsx_element;
@@ -41,11 +43,13 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(postgres_pool.clone()))
             .app_data(web::Data::new(redis_pool.clone()))
             .app_data(web::Data::new(server.clone()))
+            .wrap(CookieSession::signed(&[0; 32]).secure(false))
             .service(coding_lesson::get_coding_lesson)
             .service(getusers)
             .route("/ws", web::get().to(ws_server::session_service))
             .configure(lesson_plan::init)
             .configure(lesson_session::init)
+            .configure(account_management::init)
     })
     .bind("127.0.0.1:8080")?
     .run()
