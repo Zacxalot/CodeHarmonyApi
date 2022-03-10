@@ -16,6 +16,12 @@ pub enum CodeHarmonyResponseError {
     DatabaseConnection,
     #[error("{{\"errcode\": 0, \"msg\": \"Couldn't connect to Redis\"}}")]
     RedisConnection,
+    #[error("{{\"errcode\":401, \"msg\": \"Not logged in \"}}")]
+    NotLoggedIn,
+    #[error("{{\"errcode\":900, \"msg\": \"Database query failed \"}}")]
+    DatabaseQueryFailed,
+    #[error("{{\"errcode\":901, \"msg\": \"Couldn't parse rows\"}}")]
+    CouldntParseRows,
 }
 
 impl error::ResponseError for CodeHarmonyResponseError {
@@ -25,6 +31,9 @@ impl error::ResponseError for CodeHarmonyResponseError {
             CodeHarmonyResponseError::BadRequest(_, _) => StatusCode::BAD_REQUEST,
             CodeHarmonyResponseError::DatabaseConnection => StatusCode::INTERNAL_SERVER_ERROR,
             CodeHarmonyResponseError::RedisConnection => StatusCode::INTERNAL_SERVER_ERROR,
+            CodeHarmonyResponseError::NotLoggedIn => StatusCode::UNAUTHORIZED,
+            CodeHarmonyResponseError::DatabaseQueryFailed => StatusCode::INTERNAL_SERVER_ERROR,
+            CodeHarmonyResponseError::CouldntParseRows => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 

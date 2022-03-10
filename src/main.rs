@@ -14,6 +14,7 @@ mod error;
 mod jsx_element;
 mod lesson_plan;
 mod lesson_session;
+mod student_teacher;
 mod ws_server;
 mod ws_session;
 
@@ -50,6 +51,7 @@ async fn main() -> std::io::Result<()> {
             .configure(lesson_plan::init)
             .configure(lesson_session::init)
             .configure(account_management::init)
+            .configure(student_teacher::init)
     })
     .bind("127.0.0.1:8080")?
     .run()
