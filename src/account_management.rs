@@ -15,6 +15,7 @@ use crate::error::CodeHarmonyResponseError;
 // Group all of the services together into a single init
 pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(login)
+        .service(logout)
         .service(register)
         .service(check_logged_in);
 }
@@ -44,12 +45,15 @@ async fn login(
         .await
         .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
+    // Get the username and hash
     const STATEMENT: &str = "SELECT username, hash FROM codeharmony.users WHERE username=$1";
     let rows: Vec<Row> = client
         .query(STATEMENT, &[&payload.username])
         .await
         .map_err(|_| CodeHarmonyResponseError::BadRequest(0, "User not found".to_owned()))?;
 
+    // If the user exists and could be deserialized
+    // Verify the hash and login if it's correct
     if let Some(Ok(user_data)) = rows.into_iter().map(LoginDBData::try_from).next() {
         let parsed_hash = PasswordHash::new(&user_data.hash).map_err(|_| {
             CodeHarmonyResponseError::InternalError(1, "Couldn't decode password hash".to_owned())
@@ -67,7 +71,6 @@ async fn login(
                 CodeHarmonyResponseError::InternalError(5, "Couldn't save session".to_owned())
             })?;
 
-        println!("Login successful");
         Ok(HttpResponse::Ok())
     } else {
         Err(CodeHarmonyResponseError::BadRequest(
@@ -75,6 +78,13 @@ async fn login(
             "User not found".to_owned(),
         ))
     }
+}
+
+// Completes logout
+#[post("/account/logout")]
+async fn logout(session: Session) -> Result<impl Responder, CodeHarmonyResponseError> {
+    session.remove("username");
+    Ok(HttpResponse::Ok())
 }
 
 #[derive(Deserialize)]
@@ -130,6 +140,7 @@ async fn register(
 // Check login
 #[get("/account/check")]
 async fn check_logged_in(session: Session) -> Result<impl Responder, CodeHarmonyResponseError> {
+    // If the user exists, echo
     if let Ok(Some(username)) = session.get::<String>("username") {
         Ok(HttpResponse::Ok().json(json!({ "username": username })))
     } else {
