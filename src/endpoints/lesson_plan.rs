@@ -413,7 +413,7 @@ async fn perform_plan_operation(
                     CodeHarmonyResponseError::BadRequest(1, "Invalid operation data".to_string())
                 })?;
 
-            const STATEMENT:&str = "INSERT INTO codeharmony.lesson_plan_section(plan_name,username,order_pos,section_name,section_type) VALUES($1,$2,$3,$4,LECTURE)";
+            const STATEMENT:&str = "INSERT INTO codeharmony.lesson_plan_section(plan_name,username,order_pos,section_name,section_type) VALUES($1,$2,$3,$4,'LECTURE ')";
 
             client
                 .query(
