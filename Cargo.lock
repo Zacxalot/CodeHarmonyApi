@@ -804,6 +804,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a32fd6af2b5827bce66c29053ba0e7c42b9dcab01835835058558c10851a46b"
 
 [[package]]
+name = "bimap"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc0455254eb5c6964c4545d8bac815e1a1be4f3afe0ae695ea539c12d728d44b"
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -953,6 +959,7 @@ dependencies = [
  "actix-web 4.0.1",
  "actix-web-actors",
  "argon2",
+ "bimap",
  "chrono",
  "config",
  "deadpool-postgres",
@@ -962,6 +969,7 @@ dependencies = [
  "mime",
  "pct-str",
  "pg_mapper",
+ "rand 0.8.5",
  "redis",
  "serde 1.0.136",
  "serde_json",

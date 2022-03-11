@@ -5,10 +5,12 @@ use actix_web::{
     web::{self},
     App, HttpResponse, HttpServer, Responder,
 };
+use actors::teacher_code_manager::TeacherCodeManager;
 use deadpool_postgres::{ManagerConfig, Pool, RecyclingMethod};
 use tokio_postgres::NoTls;
 
 mod account_management;
+mod actors;
 mod coding_lesson;
 mod error;
 mod jsx_element;
@@ -38,12 +40,16 @@ async fn main() -> std::io::Result<()> {
     // Setup lesson session server
     let server = ws_server::SessionServer::new().start();
 
+    // Teacher code actor
+    let teacher_code_actor = TeacherCodeManager::new().start();
+
     //Create and start server
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(postgres_pool.clone()))
             .app_data(web::Data::new(redis_pool.clone()))
             .app_data(web::Data::new(server.clone()))
+            .app_data(web::Data::new(teacher_code_actor.clone()))
             .wrap(CookieSession::signed(&[0; 32]).secure(false))
             .service(coding_lesson::get_coding_lesson)
             .service(getusers)
