@@ -1,24 +1,22 @@
 use actix::Actor;
 use actix_session::CookieSession;
 use actix_web::{
-    get,
     web::{self},
-    App, HttpResponse, HttpServer, Responder,
+    App, HttpServer,
 };
-use actors::teacher_code_manager::TeacherCodeManager;
-use deadpool_postgres::{ManagerConfig, Pool, RecyclingMethod};
+use actors::{
+    teacher_code_manager::TeacherCodeManager,
+    ws_server::{session_service, SessionServer},
+};
+
+use endpoints::{account_management, lesson_plan, lesson_session, student_teacher};
+
+use deadpool_postgres::{ManagerConfig, RecyclingMethod};
 use tokio_postgres::NoTls;
 
-mod account_management;
 mod actors;
-mod coding_lesson;
-mod error;
-mod jsx_element;
-mod lesson_plan;
-mod lesson_session;
-mod student_teacher;
-mod ws_server;
-mod ws_session;
+mod endpoints;
+mod utils;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -38,7 +36,7 @@ async fn main() -> std::io::Result<()> {
     let redis_pool = cfg.create_pool(None).unwrap();
 
     // Setup lesson session server
-    let server = ws_server::SessionServer::new().start();
+    let server = SessionServer::new().start();
 
     // Teacher code actor
     let teacher_code_actor = TeacherCodeManager::new().start();
@@ -46,14 +44,12 @@ async fn main() -> std::io::Result<()> {
     //Create and start server
     HttpServer::new(move || {
         App::new()
+            .wrap(CookieSession::signed(&[0; 32]).secure(false))
             .app_data(web::Data::new(postgres_pool.clone()))
             .app_data(web::Data::new(redis_pool.clone()))
             .app_data(web::Data::new(server.clone()))
             .app_data(web::Data::new(teacher_code_actor.clone()))
-            .wrap(CookieSession::signed(&[0; 32]).secure(false))
-            .service(coding_lesson::get_coding_lesson)
-            .service(getusers)
-            .route("/ws", web::get().to(ws_server::session_service))
+            .route("/ws", web::get().to(session_service))
             .configure(lesson_plan::init)
             .configure(lesson_session::init)
             .configure(account_management::init)
@@ -62,31 +58,4 @@ async fn main() -> std::io::Result<()> {
     .bind("127.0.0.1:8080")?
     .run()
     .await
-}
-
-// #[derive(Serialize, Deserialize)]
-// struct InfoObj {
-//     elType:String
-// }
-
-// #[get("/infotest")]
-// async fn infotest() -> impl Responder {
-//     HttpResponse::Ok().json(InfoObj {
-//         elType:String::from("h1")
-//     })
-// }
-
-#[get("/users")]
-async fn getusers(db_pool: web::Data<Pool>) -> impl Responder {
-    let client = db_pool.get().await.unwrap();
-
-    let statement = client
-        .prepare("SELECT * FROM codeharmony.users")
-        .await
-        .unwrap();
-
-    for row in client.query(&statement, &[]).await.iter() {
-        println!("{:?}", row.get(0));
-    }
-    HttpResponse::Ok()
 }

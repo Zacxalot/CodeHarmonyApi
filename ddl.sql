@@ -15,7 +15,6 @@ CREATE TABLE codeharmony.users (
     CONSTRAINT username_min_length CHECK (length(username) >= 3)
 );
 
-
 CREATE TABLE codeharmony.lesson_plan (
 	plan_name VARCHAR(128) NOT NULL,
 	username VARCHAR(32) NOT NULL,
@@ -23,16 +22,6 @@ CREATE TABLE codeharmony.lesson_plan (
 	CONSTRAINT lesson_plan_pk PRIMARY KEY (plan_name,username),
 	CONSTRAINT lesson_plan_username_fk FOREIGN KEY (username) REFERENCES codeharmony.users(username)
 );
-
-
-CREATE TABLE codeharmony.published_lesson_plan (
-	plan_name VARCHAR(128) NOT NULL,
-	username VARCHAR(32) NOT NULL,
-
-	CONSTRAINT published_lesson_plan_pk PRIMARY KEY (plan_name,username),
-	CONSTRAINT published_lesson_plan_username_fk FOREIGN KEY (username) REFERENCES codeharmony.users(username)
-);
-
 
 CREATE TABLE codeharmony.lesson_session (
 	session_date TIMESTAMP NOT NULL DEFAULT current_timestamp,

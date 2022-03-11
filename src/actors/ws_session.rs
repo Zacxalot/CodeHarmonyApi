@@ -1,7 +1,7 @@
 use actix::{Actor, ActorContext, Addr, AsyncContext, Handler, StreamHandler};
 use actix_web_actors::ws;
 
-use crate::ws_server::{
+use crate::actors::ws_server::{
     ControlInstruction, SessionIdentifier, SessionServer, StudentJoin, TeacherJoin, WSResponse,
 };
 

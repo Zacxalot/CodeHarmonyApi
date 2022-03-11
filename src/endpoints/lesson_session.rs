@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio_postgres::error::SqlState;
 
-use crate::{error::CodeHarmonyResponseError, lesson_plan::get_plan_info_query};
+use crate::{lesson_plan::get_plan_info_query, utils::error::CodeHarmonyResponseError};
 
 #[derive(Serialize)]
 struct SessionInfo {

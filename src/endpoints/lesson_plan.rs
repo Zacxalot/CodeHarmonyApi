@@ -1,5 +1,5 @@
-use crate::error::CodeHarmonyResponseError;
-use crate::jsx_element::JSXElement;
+use crate::utils::error::CodeHarmonyResponseError;
+use crate::utils::jsx_element::JSXElement;
 use actix_web::{get, post, put, web, HttpRequest, HttpResponse, Responder};
 use deadpool_postgres::{Object, Pool};
 use serde::{Deserialize, Serialize};

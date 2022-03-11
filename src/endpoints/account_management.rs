@@ -10,7 +10,7 @@ use serde::Deserialize;
 use serde_json::json;
 use tokio_postgres::Row;
 
-use crate::error::CodeHarmonyResponseError;
+use crate::utils::error::CodeHarmonyResponseError;
 
 // Group all of the services together into a single init
 pub fn init(cfg: &mut web::ServiceConfig) {

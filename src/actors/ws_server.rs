@@ -4,7 +4,7 @@ use actix::{Actor, Addr, Context, Handler, Message, Recipient};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 
-use crate::ws_session::WsClientSession;
+use crate::actors::ws_session::WsClientSession;
 
 pub async fn session_service(
     req: HttpRequest,

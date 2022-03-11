@@ -6,7 +6,7 @@ use tokio_postgres::error::SqlState;
 
 use crate::{
     actors::teacher_code_manager::{GetCode, GetTeacher, TeacherCodeManager},
-    error::CodeHarmonyResponseError,
+    utils::error::CodeHarmonyResponseError,
 };
 
 // Group all of the services together into a single init
