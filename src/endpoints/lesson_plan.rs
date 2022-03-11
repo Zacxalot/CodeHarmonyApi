@@ -1,5 +1,6 @@
 use crate::utils::error::CodeHarmonyResponseError;
 use crate::utils::jsx_element::JSXElement;
+use actix_session::Session;
 use actix_web::{get, post, put, web, HttpRequest, HttpResponse, Responder};
 use deadpool_postgres::{Object, Pool};
 use serde::{Deserialize, Serialize};
@@ -73,7 +74,7 @@ struct SessionListItem {
 // Group all of the services together into a single init
 pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(create_lesson_plan)
-        .service(get_plan_list)
+        .service(get_plan_and_session_list)
         .service(get_plan_info)
         .service(set_plan_section)
         .service(perform_plan_operation)
@@ -84,21 +85,19 @@ pub fn init(cfg: &mut web::ServiceConfig) {
 impl TryFrom<&tokio_postgres::Row> for PlanSection {
     type Error = Box<dyn std::error::Error>;
     fn try_from(row: &tokio_postgres::Row) -> Result<Self, Self::Error> {
-        let cols = row.columns();
-
-        if cols.len() >= 5
-            && cols.get(0).unwrap().name() == "section_name"
-            && cols.get(1).unwrap().name() == "section_type"
-            && cols.get(2).unwrap().name() == "section_elements"
-            && cols.get(3).unwrap().name() == "coding_data"
-            && cols.get(4).unwrap().name() == "order_pos"
-        {
+        if let (Ok(name), Ok(sectionType), Ok(elements), Ok(codingData), Ok(orderPos)) = (
+            row.try_get::<&str, String>("section_name"),
+            row.try_get::<&str, String>("section_type"),
+            row.try_get::<&str, serde_json::Value>("section_elements"),
+            row.try_get::<&str, serde_json::Value>("coding_data"),
+            row.try_get::<&str, i16>("order_pos"),
+        ) {
             return Ok(PlanSection {
-                name: row.try_get::<usize, String>(0)?,
-                sectionType: row.try_get::<usize, String>(1)?,
-                elements: serde_json::from_value(row.try_get::<usize, serde_json::Value>(2)?)?,
-                codingData: serde_json::from_value(row.try_get::<usize, serde_json::Value>(3)?)?,
-                orderPos: row.try_get::<usize, i16>(4)?,
+                name,
+                sectionType,
+                elements: serde_json::from_value(elements)?,
+                codingData: serde_json::from_value(codingData)?,
+                orderPos,
             });
         }
         Err(Box::from("Invalid Rows"))
@@ -117,134 +116,149 @@ struct NewPlanRequest {
 async fn create_lesson_plan(
     payload: web::Json<NewPlanRequest>,
     db_pool: web::Data<Pool>,
+    session: Session,
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
-    // Get db client
-    let mut client = db_pool
-        .get()
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+    if let Ok(Some(username)) = session.get::<String>("username") {
+        // Get db client
+        let mut client = db_pool
+            .get()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
-    // Start transaction
-    let transaction = client
-        .transaction()
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+        // Start transaction
+        let transaction = client
+            .transaction()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
-    // Try to insert the new plan into to the db
-    transaction
-        .query(
-            "INSERT INTO codeharmony.lesson_plan(username,plan_name) VALUES ('user1',$1)",
-            &[&payload.planName],
-        )
-        .await
-        .map_err(|err| match err.as_db_error() {
-            Some(err) => match *err.code() {
-                SqlState::UNIQUE_VIOLATION => CodeHarmonyResponseError::BadRequest(
-                    0,
-                    "Plan already exists under this name".to_string(),
-                ),
-                _ => CodeHarmonyResponseError::DatabaseConnection,
-            },
-            None => CodeHarmonyResponseError::DatabaseConnection,
-        })?;
+        // Try to insert the new plan into to the db
+        transaction
+            .query(
+                "INSERT INTO codeharmony.lesson_plan(username,plan_name) VALUES ($1,$2)",
+                &[&username, &payload.planName],
+            )
+            .await
+            .map_err(|err| match err.as_db_error() {
+                Some(err) => match *err.code() {
+                    SqlState::UNIQUE_VIOLATION => CodeHarmonyResponseError::BadRequest(
+                        0,
+                        "Plan already exists under this name".to_string(),
+                    ),
+                    _ => CodeHarmonyResponseError::DatabaseConnection,
+                },
+                None => CodeHarmonyResponseError::DatabaseConnection,
+            })?;
 
-    // Get the resulting name of the plan
-    let inserted_plan_name: String = transaction
-        .query(
-            "SELECT plan_name FROM codeharmony.lesson_plan WHERE plan_name=$1",
-            &[&payload.planName],
-        )
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?[0]
-        .get::<usize, String>(0);
+        // Get the resulting name of the plan
+        let inserted_plan_name: String = transaction
+            .query(
+                "SELECT plan_name FROM codeharmony.lesson_plan WHERE plan_name=$1 and username=$2",
+                &[&payload.planName, &username],
+            )
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?[0]
+            .get::<usize, String>(0);
 
-    // Commit transaction, everything went well
-    transaction
-        .commit()
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+        // Commit transaction, everything went well
+        transaction
+            .commit()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
-    // Return ok with the new plan name
-    Ok(HttpResponse::Ok().json(NewPlanResponse {
-        planName: inserted_plan_name,
-        msg: String::new(),
-    }))
+        // Return ok with the new plan name
+        return Ok(HttpResponse::Ok().json(NewPlanResponse {
+            planName: inserted_plan_name,
+            msg: String::new(),
+        }));
+    }
+    Err(CodeHarmonyResponseError::NotLoggedIn)
 }
 
-// Get list of plans for dashboard
+// Get list of plans and sessions for dashboard
 #[get("/plan/list")]
-async fn get_plan_list(
+async fn get_plan_and_session_list(
     db_pool: web::Data<Pool>,
+    session: Session,
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
-    // Get db client
-    let client = db_pool
-        .get()
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+    if let Ok(Some(username)) = session.get::<String>("username") {
+        // Get db client
+        let client = db_pool
+            .get()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
-    // Get the list of plans from db
-    let plan_list: Vec<Row> = client
-        .query(
-            "SELECT plan_name FROM codeharmony.lesson_plan WHERE username='user1'",
-            &[],
-        )
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+        // Get the list of plans from db
+        let plan_list: Vec<Row> = client
+            .query(
+                "SELECT plan_name FROM codeharmony.lesson_plan WHERE username=$1",
+                &[&username],
+            )
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
-    // Get the list of sessions from db
-    let session_list: Vec<Row> = client
-        .query(
-            "SELECT plan_name,session_name FROM codeharmony.lesson_session WHERE username='user1'",
-            &[],
-        )
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+        // Get the list of sessions from db
+        let session_list: Vec<Row> = client
+            .query(
+                "SELECT plan_name,session_name FROM codeharmony.lesson_session WHERE username=$1",
+                &[&username],
+            )
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
-    // Return list of plans
-    Ok(HttpResponse::Ok().json(json!({
-        "plans":plan_list.iter().map(|x| PlanInfoListItem{planName:x.get(0)}).collect::<Vec<PlanInfoListItem>>(),
-        "sessions":session_list.iter().map(|row| SessionListItem{planName:row.get(0),sessionName:row.get(1)}).collect::<Vec<SessionListItem>>()
-    })))
+        // Return list of plans and sessions
+        return Ok(HttpResponse::Ok().json(json!({
+            "plans":plan_list.iter().map(|x| PlanInfoListItem{planName:x.get(0)}).collect::<Vec<PlanInfoListItem>>(),
+            "sessions":session_list.iter().map(|row| SessionListItem{planName:row.get(0),sessionName:row.get(1)}).collect::<Vec<SessionListItem>>()
+        })));
+    }
+
+    Err(CodeHarmonyResponseError::NotLoggedIn)
 }
 
 // Get all associated information about a plan
 #[get("/plan/info/{plan_name}")]
 async fn get_plan_info(
     db_pool: web::Data<Pool>,
-    req: HttpRequest,
+    path: web::Path<String>,
+    session: Session,
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
-    // Get plan name from uri
-    let plan_name = match req.match_info().get("plan_name") {
-        Some(plan_name) => plan_name,
-        None => {
-            return Err(CodeHarmonyResponseError::BadRequest(
-                0,
-                "Expected plan name in uri".to_string(),
-            ))
-        }
-    };
+    if let Ok(Some(username)) = session.get::<String>("username") {
+        // Get plan name from uri
+        let plan_name = path.into_inner();
 
-    // Get db client
-    let client = db_pool
-        .get()
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+        // Get db client
+        let client = db_pool
+            .get()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
-    // Get sections from database
-    let sections = get_plan_info_query(&client, plan_name).await?;
+        // Get sections from database
+        let sections = get_plan_info_query(&client, &plan_name, &username).await?;
 
-    // Return list of plans
-    Ok(HttpResponse::Ok().json(sections))
+        // Return list of plans
+        return Ok(HttpResponse::Ok().json(sections));
+    }
+
+    Err(CodeHarmonyResponseError::NotLoggedIn)
 }
 
 // Get sections from the database
 pub async fn get_plan_info_query(
     client: &Object,
     plan_name: &str,
+    username: &str,
 ) -> Result<Vec<PlanSection>, CodeHarmonyResponseError> {
     // Get rows from database
-    let rows = client.query("SELECT section_name, section_type, section_elements, coding_data, order_pos FROM codeharmony.lesson_plan_section WHERE plan_name=$1 and username='user1' ORDER BY order_pos ASC",&[&plan_name]).await
-                                      .map_err(|_| CodeHarmonyResponseError::InternalError(1,"Couldn't get rows from database".to_string()))?;
+    const STATEMENT:&str = "SELECT section_name, section_type, section_elements, coding_data, order_pos FROM codeharmony.lesson_plan_section WHERE plan_name=$1 and username=$2 ORDER BY order_pos ASC";
+    let rows = client
+        .query(STATEMENT, &[&plan_name, &username])
+        .await
+        .map_err(|_| {
+            CodeHarmonyResponseError::InternalError(
+                1,
+                "Couldn't get rows from database".to_string(),
+            )
+        })?;
 
     // Convert rows to Vec
     let plan_sections = rows
@@ -270,110 +284,153 @@ struct RenameSectionJSON {
 #[put("/plan/info/{plan_name}/rename")]
 async fn update_plan_section_name(
     db_pool: web::Data<Pool>,
-    req: HttpRequest,
+    path: web::Path<String>,
     section_names: web::Json<RenameSectionJSON>,
+    session: Session,
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
-    // Get db client
-    let client = db_pool
-        .get()
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+    // Get username
+    if let Ok(Some(username)) = session.get::<String>("username") {
+        // Get db client
+        let client = db_pool
+            .get()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
-    // Get plan name from uri
-    let plan_name = match req.match_info().get("plan_name") {
-        Some(plan_name) => plan_name,
-        None => {
-            return Err(CodeHarmonyResponseError::BadRequest(
-                0,
-                "Expected plan name in uri".to_string(),
-            ))
-        }
-    };
+        // Get plan name from uri
+        let plan_name = path.into_inner();
 
-    client.query("UPDATE codeharmony.lesson_plan_section SET section_name = $1 WHERE section_name = $2 and plan_name = $3 and username = $4",
-    &[&section_names.new_section_name,&section_names.old_section_name, &plan_name, &"user1".to_string()]).await
-        .map_err(|e| {println!("{:?}",e);CodeHarmonyResponseError::InternalError(1,"Couldn't update database".to_string())})?;
+        const STATEMENT:&str = "UPDATE codeharmony.lesson_plan_section SET section_name = $1 WHERE section_name = $2 and plan_name = $3 and username = $4";
 
-    // Return Ok!
-    Ok(HttpResponse::Ok())
+        client
+            .query(
+                STATEMENT,
+                &[
+                    &section_names.new_section_name,
+                    &section_names.old_section_name,
+                    &plan_name,
+                    &username,
+                ],
+            )
+            .await
+            .map_err(|e| {
+                println!("{:?}", e);
+                CodeHarmonyResponseError::InternalError(1, "Couldn't update database".to_string())
+            })?;
+
+        // Return Ok!
+        return Ok(HttpResponse::Ok());
+    }
+
+    Err(CodeHarmonyResponseError::NotLoggedIn)
 }
 
 // Update the json data for a plan section
 #[put("/plan/info/{plan_name}")]
 async fn set_plan_section(
     db_pool: web::Data<Pool>,
-    req: HttpRequest,
+    path: web::Path<String>,
     section: web::Json<PlanSection>,
+    session: Session,
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
-    // Get plan name from uri
-    let plan_name = match req.match_info().get("plan_name") {
-        Some(plan_name) => plan_name,
-        None => {
-            return Err(CodeHarmonyResponseError::BadRequest(
-                0,
-                "Expected plan name in uri".to_string(),
-            ))
-        }
-    };
+    // Get username
+    if let Ok(Some(username)) = session.get::<String>("username") {
+        // Get plan name from uri
+        let plan_name = path.into_inner();
 
-    // Get db client
-    let client = db_pool
-        .get()
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+        // Get db client
+        let client = db_pool
+            .get()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
-    // Get the body as a json string
-    let section_json = serde_json::to_value(&section.elements).map_err(|_| {
-        CodeHarmonyResponseError::BadRequest(1, "Couldn't serialise elements".to_string())
-    })?;
+        // Get the body as a json string
+        let section_json = serde_json::to_value(&section.elements).map_err(|_| {
+            CodeHarmonyResponseError::BadRequest(0, "Couldn't serialise elements".to_string())
+        })?;
 
-    let coding_data = serde_json::to_value(&section.codingData).map_err(|_| {
-        CodeHarmonyResponseError::BadRequest(1, "Couldn't serialise coding data".to_string())
-    })?;
+        let coding_data = serde_json::to_value(&section.codingData).map_err(|_| {
+            CodeHarmonyResponseError::BadRequest(1, "Couldn't serialise coding data".to_string())
+        })?;
 
-    // Send the update query with the new section json data
-    client.query("UPDATE codeharmony.lesson_plan_section SET section_elements = $1, order_pos = $2, coding_data = $5 WHERE plan_name = $3 and section_name=$4 and username='user1'",&[&section_json,&section.orderPos,&plan_name,&section.name,&coding_data]).await
-          .map_err(|e| {println!("{:?}",e);CodeHarmonyResponseError::InternalError(1,"Couldn't update database".to_string())})?;
+        // Send the update query with the new section json data
+        const STATEMENT:&str = "UPDATE codeharmony.lesson_plan_section SET section_elements = $1, order_pos = $2, coding_data = $5 WHERE plan_name = $3 and section_name=$4 and username=$6";
 
-    // Return Ok!
-    Ok(HttpResponse::Ok())
+        client
+            .query(
+                STATEMENT,
+                &[
+                    &section_json,
+                    &section.orderPos,
+                    &plan_name,
+                    &section.name,
+                    &coding_data,
+                    &username,
+                ],
+            )
+            .await
+            .map_err(|e| {
+                println!("{:?}", e);
+                CodeHarmonyResponseError::InternalError(2, "Couldn't update database".to_string())
+            })?;
+
+        // Return Ok!
+        return Ok(HttpResponse::Ok());
+    }
+
+    Err(CodeHarmonyResponseError::NotLoggedIn)
 }
 
-// Add new section to plan
+// Perform plan operation
 #[post("/plan/info/{plan_name}")]
 async fn perform_plan_operation(
     db_pool: web::Data<Pool>,
     req: HttpRequest,
     operation: web::Json<PlanOperation>,
+    session: Session,
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
-    // Get plan name from uri
-    let plan_name = match req.match_info().get("plan_name") {
-        Some(plan_name) => plan_name,
-        None => {
-            return Err(CodeHarmonyResponseError::BadRequest(
-                0,
-                "Expected plan name in uri".to_string(),
-            ))
+    // Get username
+    if let Ok(Some(username)) = session.get::<String>("username") {
+        // Get plan name from uri
+        let plan_name = match req.match_info().get("plan_name") {
+            Some(plan_name) => plan_name,
+            None => {
+                return Err(CodeHarmonyResponseError::BadRequest(
+                    0,
+                    "Expected plan name in uri".to_string(),
+                ))
+            }
+        };
+
+        // Get db client
+        let client = db_pool
+            .get()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+        if &operation.request == "new-section" {
+            let data: NewSectionData =
+                serde_json::from_value(operation.data.to_owned()).map_err(|_| {
+                    CodeHarmonyResponseError::BadRequest(1, "Invalid operation data".to_string())
+                })?;
+
+            const STATEMENT:&str = "INSERT INTO codeharmony.lesson_plan_section(plan_name,username,order_pos,section_name,section_type) VALUES($1,$2,$3,$4,LECTURE)";
+
+            client
+                .query(
+                    STATEMENT,
+                    &[&plan_name, &username, &data.orderPos, &data.sectionName],
+                )
+                .await
+                .map_err(|e| {
+                    println!("{:?}", e);
+                    CodeHarmonyResponseError::InternalError(2, "Couldn't add section".to_string())
+                })?;
         }
-    };
 
-    // Get db client
-    let client = db_pool
-        .get()
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
-
-    if &operation.request == "new-section" {
-        let data: NewSectionData =
-            serde_json::from_value(operation.data.to_owned()).map_err(|_| {
-                CodeHarmonyResponseError::BadRequest(1, "Invalid operation data".to_string())
-            })?;
-
-        client.query("INSERT INTO codeharmony.lesson_plan_section(plan_name,username,order_pos,section_name,section_type) VALUES($1,$2,$3,$4,$5)",&[&plan_name,&"user1",&data.orderPos,&data.sectionName,&"LECTURE"]).await
-              .map_err(|e| {println!("{:?}",e);CodeHarmonyResponseError::InternalError(2,"Couldn't add section".to_string())})?;
+        return Ok(HttpResponse::Ok());
     }
 
-    Ok(HttpResponse::Ok())
+    Err(CodeHarmonyResponseError::NotLoggedIn)
 }
 
 #[derive(Deserialize)]
@@ -389,34 +446,54 @@ async fn update_plan_section_type(
     db_pool: web::Data<Pool>,
     req: HttpRequest,
     update_details: web::Json<UpdateTypeJSON>,
+    session: Session,
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
-    // Get db client
-    let client = db_pool
-        .get()
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+    // Get username
+    if let Ok(Some(username)) = session.get::<String>("username") {
+        // Get db client
+        let client = db_pool
+            .get()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
-    // Get plan name from uri
-    let plan_name = match req.match_info().get("plan_name") {
-        Some(plan_name) => plan_name,
-        None => {
-            return Err(CodeHarmonyResponseError::BadRequest(
-                0,
-                "Expected plan name in uri".to_string(),
-            ))
-        }
-    };
+        // Get plan name from uri
+        let plan_name = match req.match_info().get("plan_name") {
+            Some(plan_name) => plan_name,
+            None => {
+                return Err(CodeHarmonyResponseError::BadRequest(
+                    0,
+                    "Expected plan name in uri".to_string(),
+                ))
+            }
+        };
 
-    let new_type = if update_details.new_type.starts_with('L') {
-        "LECTURE "
-    } else {
-        "CODING  "
-    };
+        let new_type = if update_details.new_type.starts_with('L') {
+            "LECTURE "
+        } else {
+            "CODING  "
+        };
 
-    client.query("UPDATE codeharmony.lesson_plan_section SET section_type = $1 WHERE section_name = $2 and plan_name = $3 and username = $4",
-    &[&new_type, &update_details.section_name, &plan_name, &"user1"]).await
-        .map_err(|e| {println!("{:?}",e);CodeHarmonyResponseError::InternalError(1,"Couldn't update database".to_string())})?;
+        const STATEMENT:&str = "UPDATE codeharmony.lesson_plan_section SET section_type = $1 WHERE section_name = $2 and plan_name = $3 and username = $4";
 
-    // Return Ok!
-    Ok(HttpResponse::Ok())
+        client
+            .query(
+                STATEMENT,
+                &[
+                    &new_type,
+                    &update_details.section_name,
+                    &plan_name,
+                    &username,
+                ],
+            )
+            .await
+            .map_err(|e| {
+                println!("{:?}", e);
+                CodeHarmonyResponseError::InternalError(1, "Couldn't update database".to_string())
+            })?;
+
+        // Return Ok!
+        return Ok(HttpResponse::Ok());
+    }
+
+    Err(CodeHarmonyResponseError::NotLoggedIn)
 }

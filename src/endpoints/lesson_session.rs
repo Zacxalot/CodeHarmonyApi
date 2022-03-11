@@ -40,14 +40,8 @@ async fn create_session(
         .await
         .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
-    // Start transaction
-    let transaction = client
-        .transaction()
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
-
     // Try to insert the new plan into to the db
-    transaction
+    client
         .query(
             "INSERT INTO codeharmony.lesson_session(plan_name,session_name,username) VALUES ($1,$2,$3)",
             &[&plan_name, &session_name,&"user1"],
@@ -64,23 +58,17 @@ async fn create_session(
             None => CodeHarmonyResponseError::DatabaseConnection,
         })?;
 
-    // Commit transaction, everything went well
-    transaction
-        .commit()
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
-
     Ok(HttpResponse::Ok().json(json!({"plan_name":plan_name,"session_name":session_name})))
 }
 
 // Get info about a specific session
-#[get("session/info/{plan_name}/{session_name}")]
+#[get("session/info/{plan_name}/{session_name}/{teacher_name}")]
 async fn get_session_info(
     db_pool: web::Data<Pool>,
-    path: web::Path<(String, String)>,
+    path: web::Path<(String, String, String)>,
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
     // Get vars from path
-    let (plan_name, session_name) = path.into_inner();
+    let (plan_name, session_name, teacher_name) = path.into_inner();
 
     // Get db client
     let client = db_pool
@@ -89,7 +77,7 @@ async fn get_session_info(
         .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
     // Get data
-    let plan_future = get_plan_info_query(&client, &plan_name);
+    let plan_future = get_plan_info_query(&client, &plan_name, &teacher_name);
     let session_future = get_session_info_query(&client, &plan_name, &session_name);
 
     // Wait for both futures at once
