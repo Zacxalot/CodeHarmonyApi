@@ -1,5 +1,4 @@
 DROP TABLE IF EXISTS codeharmony.lesson_session;
-DROP TABLE IF EXISTS codeharmony.published_lesson_plan;
 DROP TABLE IF EXISTS codeharmony.lesson_plan_section;
 DROP TABLE IF EXISTS codeharmony.lesson_plan;
 DROP TABLE IF EXISTS codeharmony.student_teacher;
@@ -38,12 +37,13 @@ CREATE TABLE codeharmony.lesson_plan_section (
 	username VARCHAR(32) NOT NULL,
 	section_elements JSONB NOT null default '[]',
 	order_pos int2 NOT NULL,
-	coding_data JSONB NOT NULL DEFAULT '{}',
+	coding_data JSONB NOT NULL DEFAULT '{"language": "python", "startingCode": "", "expectedOutput": ""}',
 	section_name VARCHAR(64) NOT NULL,
 	section_type CHAR(8) NOT NULL,
 
 	CONSTRAINT lesson_plan_section_pk PRIMARY KEY (plan_name,username,section_name),
-	CONSTRAINT lesson_plan_section_plan_fk FOREIGN KEY (username,plan_name) REFERENCES codeharmony.lesson_plan(username,plan_name)
+	CONSTRAINT lesson_plan_section_plan_fk FOREIGN KEY (username,plan_name) REFERENCES codeharmony.lesson_plan(username,plan_name),
+	CONSTRAINT plan_section_name_length CHECK (length(section_name) >= 1)
 );
 
 CREATE TABLE codeharmony.student_teacher(
