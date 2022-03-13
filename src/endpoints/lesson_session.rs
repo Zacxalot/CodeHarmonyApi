@@ -38,7 +38,7 @@ async fn create_session(
 
     if let Ok(Some(username)) = session.get::<String>("username") {
         // Get db client
-        let mut client = db_pool
+        let client = db_pool
             .get()
             .await
             .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;

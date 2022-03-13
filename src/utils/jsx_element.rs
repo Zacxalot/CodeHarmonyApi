@@ -25,13 +25,13 @@ pub enum ElementType {
     img,
 }
 
-impl ElementType {
-    pub fn from_string(string: &str) -> Result<ElementType, &str> {
-        match string {
-            "h1" => Ok(ElementType::h1),
-            "p" => Ok(ElementType::p),
-            "img" => Ok(ElementType::img),
-            _ => Err("Invalid element type"),
-        }
-    }
-}
+// impl ElementType {
+//     pub fn from_string(string: &str) -> Result<ElementType, &str> {
+//         match string {
+//             "h1" => Ok(ElementType::h1),
+//             "p" => Ok(ElementType::p),
+//             "img" => Ok(ElementType::img),
+//             _ => Err("Invalid element type"),
+//         }
+//     }
+// }
