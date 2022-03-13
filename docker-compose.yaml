@@ -1,0 +1,18 @@
+services:
+  api:
+    image: code_harmony_api
+    ports:
+      - 8080:8080
+    environment:
+     - POSTGRES_PASSWORD=codeharmony
+  nginx:
+    image: code_harmony_nginx
+    ports:
+      - 80:80
+      - 443:443
+  postgres:
+    image: postgres
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_PASSWORD=codeharmony

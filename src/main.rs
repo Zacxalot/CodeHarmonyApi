@@ -1,3 +1,5 @@
+use std::env;
+
 use actix::Actor;
 use actix_session::CookieSession;
 use actix_web::{
@@ -20,11 +22,18 @@ mod utils;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    // Get host address from env
+    let addr = env::var("CH_HOST").unwrap_or_else(|_| "127.0.0.1:8080".into());
+    println!("Hosting on: {}", &addr);
+
+    let postgres_password =
+        env::var("POSTGRES_PASSWORD").unwrap_or_else(|_| panic!("POSTGRES_PASSWORD is undefined"));
+
     // Setup Postgres pool
     let mut cfg = deadpool_postgres::Config::new();
     cfg.dbname = Some("postgres".to_string());
     cfg.user = Some("postgres".to_string());
-    cfg.password = Some("codeharmony".to_string());
+    cfg.password = Some(postgres_password);
     cfg.dbname = Some("postgres".to_string());
     cfg.manager = Some(ManagerConfig {
         recycling_method: RecyclingMethod::Fast,
@@ -55,7 +64,7 @@ async fn main() -> std::io::Result<()> {
             .configure(account_management::init)
             .configure(student_teacher::init)
     })
-    .bind("127.0.0.1:8080")?
+    .bind(addr)?
     .run()
     .await
 }
