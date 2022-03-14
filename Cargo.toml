@@ -3,10 +3,6 @@ name = "code_harmony_api"
 version = "0.1.0"
 edition = "2018"
 
-[[bin]]
-name = "main"
-path = "src/main.rs"
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [profile.release]
@@ -39,3 +35,4 @@ pg_mapper = "0.2.0"
 argon2 = "0.3.4"
 bimap = "0.6.2"
 rand = "0.8.5"
+dotenv = "0.15.0"

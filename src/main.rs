@@ -14,6 +14,7 @@ use actors::{
 use endpoints::{account_management, lesson_plan, lesson_session, student_teacher};
 
 use deadpool_postgres::{ManagerConfig, RecyclingMethod};
+use dotenv::dotenv;
 use tokio_postgres::NoTls;
 
 mod actors;
@@ -22,6 +23,9 @@ mod utils;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    // Load .ENV file
+    dotenv().ok();
+
     // Get host address from env
     let addr = env::var("CH_HOST").unwrap_or_else(|_| "127.0.0.1:8080".into());
     println!("Hosting on: {}", &addr);
