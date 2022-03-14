@@ -20,6 +20,8 @@ services:
       - POSTGRES_PASSWORD=codeharmony
     networks:
       - backend
+    volumes:
+      - ./ddl.sql:/docker-entrypoint-initdb.d/ddl.sql
 
 networks:
   frontend:
