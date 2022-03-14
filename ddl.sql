@@ -1,3 +1,5 @@
+CREATE SCHEMA IF NOT EXISTS codeharmony;
+
 DROP TABLE IF EXISTS codeharmony.lesson_session;
 DROP TABLE IF EXISTS codeharmony.lesson_plan_section;
 DROP TABLE IF EXISTS codeharmony.lesson_plan;

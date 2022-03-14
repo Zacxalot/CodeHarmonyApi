@@ -1,18 +1,26 @@
 services:
   api:
-    image: code_harmony_api
-    ports:
-      - 8080:8080
+    image: chapi
     environment:
      - POSTGRES_PASSWORD=codeharmony
+     - POSTGRES_HOST=postgres
+    networks:
+     - backend
+     - frontend
   nginx:
     image: code_harmony_nginx
     ports:
       - 80:80
       - 443:443
+    networks:
+      - frontend
   postgres:
     image: postgres
-    ports:
-      - 5432:5432
     environment:
       - POSTGRES_PASSWORD=codeharmony
+    networks:
+      - backend
+
+networks:
+  frontend:
+  backend:

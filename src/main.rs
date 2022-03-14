@@ -29,9 +29,12 @@ async fn main() -> std::io::Result<()> {
     let postgres_password =
         env::var("POSTGRES_PASSWORD").unwrap_or_else(|_| panic!("POSTGRES_PASSWORD is undefined"));
 
+    let postgres_host = env::var("POSTGRES_HOST").unwrap_or_else(|_| "localhost".into());
+    println!("Postgres host: {}", &postgres_host);
+
     // Setup Postgres pool
     let mut cfg = deadpool_postgres::Config::new();
-    cfg.dbname = Some("postgres".to_string());
+    cfg.host = Some(postgres_host);
     cfg.user = Some("postgres".to_string());
     cfg.password = Some(postgres_password);
     cfg.dbname = Some("postgres".to_string());
