@@ -359,7 +359,7 @@ async fn set_plan_section(
                 CodeHarmonyResponseError::BadRequest(2, "Invalid elements format".to_string())
             })?;
 
-        let _coding_data_formatted: CodingData = serde_json::from_value(section_json.clone())
+        let _coding_data_formatted: CodingData = serde_json::from_value(coding_data.clone())
             .map_err(|_| {
                 CodeHarmonyResponseError::BadRequest(2, "Invalid coding data format".to_string())
             })?;

@@ -20,9 +20,8 @@ pub enum JSXChild {
 #[allow(non_camel_case_types)]
 #[derive(Serialize, Deserialize, Debug)]
 pub enum ElementType {
-    h1,
-    p,
-    img,
+    Typography,
+    Image,
 }
 
 // impl ElementType {
