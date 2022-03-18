@@ -31,7 +31,8 @@ pub fn init(cfg: &mut web::ServiceConfig) {
         .service(get_session_info)
         .service(start_session)
         .service(save_code)
-        .service(get_active_sessions_for_user);
+        .service(get_active_sessions_for_user)
+        .service(get_session_students);
 }
 
 // Request a new session

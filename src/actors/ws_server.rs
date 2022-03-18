@@ -40,17 +40,22 @@ pub struct User {
     username: String,
 }
 
+#[derive(Debug)]
+pub struct Student {
+    addr: Recipient<WSResponse>,
+}
+
 #[allow(dead_code)]
 pub struct SessionRoom {
     teacher: User,
-    students: HashSet<User>,
+    students: HashMap<String, Student>,
     current_section: usize,
 }
 
 impl SessionRoom {
     fn new(teacher_addr: Recipient<WSResponse>, username: String) -> Self {
         Self {
-            students: HashSet::new(),
+            students: HashMap::new(),
             teacher: User {
                 addr: teacher_addr,
                 username,
@@ -142,10 +147,9 @@ impl Handler<StudentJoin> for SessionServer {
                 .do_send(WSResponse::SetConnectedSession(msg.identifier));
             println!("Student joined session");
             // And insert the student into the list
-            session.students.insert(User {
-                addr: msg.addr,
-                username: msg.username,
-            });
+            session
+                .students
+                .insert(msg.username, Student { addr: msg.addr });
         }
     }
 }
@@ -173,7 +177,7 @@ impl Handler<ControlInstruction> for SessionServer {
                     session.current_section = new_value;
                     let msg = format!("sec {}", new_value);
                     println!("Student addresses {:?}", session.students);
-                    for student in session.students.iter() {
+                    for student in session.students.values() {
                         student.addr.do_send(WSResponse::Msg(msg.to_owned()));
                         println!("Sent instruction");
                     }
@@ -194,12 +198,12 @@ impl Handler<GetStudentData> for SessionServer {
     type Result = Vec<String>;
 
     fn handle(&mut self, msg: GetStudentData, _: &mut Self::Context) -> Self::Result {
-        if let Some(session) = self.sessions.get_mut(&msg.identifier) {
+        if let Some(session) = self.sessions.get(&msg.identifier) {
             if session.teacher.username == msg.username {
                 return session
                     .students
-                    .iter()
-                    .map(|user| user.username.clone())
+                    .keys()
+                    .map(|username| username.to_owned())
                     .collect::<Vec<String>>();
             }
         }
