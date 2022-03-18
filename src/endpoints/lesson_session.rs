@@ -1,5 +1,6 @@
 use std::convert::TryFrom;
 
+use actix::Addr;
 use actix_session::Session;
 use actix_web::{get, post, web, HttpResponse, Responder};
 use chrono::NaiveDateTime;
@@ -10,7 +11,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio_postgres::error::SqlState;
 
-use crate::{lesson_plan::get_plan_info_query, utils::error::CodeHarmonyResponseError};
+use crate::{
+    actors::{
+        teacher_code_manager::TeacherCodeManager,
+        ws_server::{GetStudentData, SessionIdentifier, SessionServer},
+    },
+    lesson_plan::get_plan_info_query,
+    utils::error::CodeHarmonyResponseError,
+};
 
 #[derive(Serialize)]
 struct SessionInfo {
@@ -249,6 +257,32 @@ WHERE codeharmony.student_teacher.student_un = $1 OR codeharmony.lesson_session.
 
         // Return Ok!
         return Ok(HttpResponse::Ok().json(sessions));
+    }
+    Err(CodeHarmonyResponseError::NotLoggedIn)
+}
+
+#[get("session/connected/{host}/{plan_name}/{session_name}")]
+async fn get_session_students(
+    session: Session,
+    session_server: web::Data<Addr<SessionServer>>,
+    path: web::Path<(String, String, String)>,
+) -> Result<impl Responder, CodeHarmonyResponseError> {
+    let (host, plan_name, session_name) = path.into_inner();
+    if let Ok(Some(username)) = session.get::<String>("username") {
+        let identifier = SessionIdentifier {
+            host,
+            session_name,
+            plan_name,
+        };
+        let usernames = session_server
+            .send(GetStudentData {
+                username,
+                identifier,
+            })
+            .await
+            .map_err(|_| CodeHarmonyResponseError::WebsocketsUnavailable)?;
+
+        return Ok(HttpResponse::Ok().json(usernames));
     }
     Err(CodeHarmonyResponseError::NotLoggedIn)
 }

@@ -8,6 +8,7 @@ use crate::actors::ws_server::{
 pub struct WsClientSession {
     pub addr: Addr<SessionServer>,
     pub connected_session: Option<SessionIdentifier>,
+    pub username: String,
 }
 
 impl Actor for WsClientSession {
@@ -35,6 +36,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsClientSession {
                 let split: Vec<&str> = text.splitn(2, ' ').collect();
                 if split.len() == 2 {
                     let addr = ctx.address().recipient::<WSResponse>();
+                    let username = self.username.clone();
 
                     // Handle text commands
                     if split[0] == "tJoin" {
@@ -47,6 +49,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsClientSession {
                                 host: split_id[2].to_owned(),
                             },
                             addr,
+                            username,
                         })
                     } else if split[0] == "sJoin" {
                         let split_id: Vec<&str> = split[1].splitn(3, ':').collect();
@@ -57,6 +60,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsClientSession {
                                 host: split_id[2].to_owned(),
                             },
                             addr,
+                            username,
                         })
                     } else if split[0] == "tInst" {
                         println!("{:?}", self.connected_session);

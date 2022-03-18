@@ -52,7 +52,7 @@ async fn main() -> std::io::Result<()> {
     let redis_pool = cfg.create_pool(None).unwrap();
 
     // Setup lesson session server
-    let server = SessionServer::new().start();
+    let ws_session_server = SessionServer::new().start();
 
     // Teacher code actor
     let teacher_code_actor = TeacherCodeManager::new().start();
@@ -63,7 +63,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(CookieSession::signed(&[0; 32]).secure(false))
             .app_data(web::Data::new(postgres_pool.clone()))
             .app_data(web::Data::new(redis_pool.clone()))
-            .app_data(web::Data::new(server.clone()))
+            .app_data(web::Data::new(ws_session_server.clone()))
             .app_data(web::Data::new(teacher_code_actor.clone()))
             .route("/ws", web::get().to(session_service))
             .configure(lesson_plan::init)

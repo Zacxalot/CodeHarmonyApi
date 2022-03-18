@@ -1,38 +1,60 @@
 use std::collections::{HashMap, HashSet};
 
 use actix::{Actor, Addr, Context, Handler, Message, Recipient};
+use actix_session::Session;
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 
-use crate::actors::ws_session::WsClientSession;
+use crate::{actors::ws_session::WsClientSession, utils::error::CodeHarmonyResponseError};
 
 pub async fn session_service(
     req: HttpRequest,
     stream: web::Payload,
     srv: web::Data<Addr<SessionServer>>,
-) -> Result<HttpResponse, Error> {
-    ws::start(
-        WsClientSession {
-            addr: srv.get_ref().clone(),
-            connected_session: None,
-        },
-        &req,
-        stream,
-    )
+    session: Session,
+) -> Result<HttpResponse, CodeHarmonyResponseError> {
+    if let Ok(Some(username)) = session.get::<String>("username") {
+        return ws::start(
+            WsClientSession {
+                addr: srv.get_ref().clone(),
+                connected_session: None,
+                username,
+            },
+            &req,
+            stream,
+        )
+        .map_err(|_| {
+            CodeHarmonyResponseError::InternalError(
+                0,
+                "Couldn't create websocket connection".into(),
+            )
+        });
+    }
+
+    Err(CodeHarmonyResponseError::NotLoggedIn)
+}
+
+#[derive(PartialEq, Hash, Eq, Debug)]
+pub struct User {
+    addr: Recipient<WSResponse>,
+    username: String,
 }
 
 #[allow(dead_code)]
 pub struct SessionRoom {
-    teacher_address: Recipient<WSResponse>,
-    student_addresses: HashSet<Recipient<WSResponse>>,
+    teacher: User,
+    students: HashSet<User>,
     current_section: usize,
 }
 
 impl SessionRoom {
-    fn new(teacher_addr: Recipient<WSResponse>) -> Self {
+    fn new(teacher_addr: Recipient<WSResponse>, username: String) -> Self {
         Self {
-            student_addresses: HashSet::new(),
-            teacher_address: teacher_addr,
+            students: HashSet::new(),
+            teacher: User {
+                addr: teacher_addr,
+                username,
+            },
             current_section: 0,
         }
     }
@@ -73,6 +95,7 @@ pub enum WSResponse {
 pub struct TeacherJoin {
     pub identifier: SessionIdentifier,
     pub addr: Recipient<WSResponse>,
+    pub username: String,
 }
 
 impl Handler<TeacherJoin> for SessionServer {
@@ -87,7 +110,7 @@ impl Handler<TeacherJoin> for SessionServer {
                 .do_send(WSResponse::SetConnectedSession(msg.identifier));
 
             // Set to room owner
-            e.insert(SessionRoom::new(msg.addr));
+            e.insert(SessionRoom::new(msg.addr, msg.username));
         }
         println!("Teacher started session")
     }
@@ -98,6 +121,7 @@ impl Handler<TeacherJoin> for SessionServer {
 pub struct StudentJoin {
     pub identifier: SessionIdentifier,
     pub addr: Recipient<WSResponse>,
+    pub username: String,
 }
 
 impl Handler<StudentJoin> for SessionServer {
@@ -111,7 +135,10 @@ impl Handler<StudentJoin> for SessionServer {
                 .do_send(WSResponse::SetConnectedSession(msg.identifier));
             println!("Student joined session");
             // And insert the student into the list
-            session.student_addresses.insert(msg.addr);
+            session.students.insert(User {
+                addr: msg.addr,
+                username: msg.username,
+            });
         }
     }
 }
@@ -136,14 +163,37 @@ impl Handler<ControlInstruction> for SessionServer {
                 if let Some(session) = self.sessions.get_mut(&msg.identifier) {
                     session.current_section = new_value;
                     let msg = format!("sec {}", new_value);
-                    for student in session.student_addresses.iter() {
-                        student.do_send(WSResponse::Msg(msg.to_owned()));
+                    println!("Student addresses {:?}", session.students);
+                    for student in session.students.iter() {
+                        student.addr.do_send(WSResponse::Msg(msg.to_owned()));
                         println!("Sent instruction");
                     }
                 }
             }
         }
+    }
+}
 
-        println!("Student joined session");
+#[derive(Message, Debug)]
+#[rtype(result = "Vec<String>")]
+pub struct GetStudentData {
+    pub identifier: SessionIdentifier,
+    pub username: String,
+}
+
+impl Handler<GetStudentData> for SessionServer {
+    type Result = Vec<String>;
+
+    fn handle(&mut self, msg: GetStudentData, _: &mut Self::Context) -> Self::Result {
+        if let Some(session) = self.sessions.get_mut(&msg.identifier) {
+            if session.teacher.username == msg.username {
+                return session
+                    .students
+                    .iter()
+                    .map(|user| user.username.clone())
+                    .collect::<Vec<String>>();
+            }
+        }
+        vec![]
     }
 }
