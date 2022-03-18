@@ -102,16 +102,23 @@ impl Handler<TeacherJoin> for SessionServer {
     type Result = ();
 
     fn handle(&mut self, msg: TeacherJoin, _: &mut Self::Context) -> Self::Result {
-        if let std::collections::hash_map::Entry::Vacant(e) =
-            self.sessions.entry(msg.identifier.clone())
-        {
-            // Set the room address in the teacher connection
-            msg.addr
-                .do_send(WSResponse::SetConnectedSession(msg.identifier));
-
-            // Set to room owner
-            e.insert(SessionRoom::new(msg.addr, msg.username));
+        // If the room exists, reset the teacher values
+        if let Some(room) = self.sessions.get_mut(&msg.identifier) {
+            room.teacher = User {
+                username: msg.username,
+                addr: msg.addr.clone(),
+            }
+        } else {
+            // If it doesn't create a new room with teacher details.
+            self.sessions.insert(
+                msg.identifier.clone(),
+                SessionRoom::new(msg.addr.clone(), msg.username),
+            );
         }
+
+        // Set the active room for the teacher
+        msg.addr
+            .do_send(WSResponse::SetConnectedSession(msg.identifier));
         println!("Teacher started session")
     }
 }
@@ -155,6 +162,8 @@ impl Handler<ControlInstruction> for SessionServer {
 
     fn handle(&mut self, msg: ControlInstruction, _: &mut Self::Context) -> Self::Result {
         let instruction: Vec<&str> = msg.instruction.split(' ').collect();
+
+        println!("Instruction is{:?}", instruction);
 
         // If setSection, get new value and session room
         // Set current_section val and send the msg to students in room
