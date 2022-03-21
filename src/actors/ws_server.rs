@@ -4,6 +4,7 @@ use actix::{Actor, Addr, Context, Handler, Message, Recipient};
 use actix_session::Session;
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
+use bimap::BiMap;
 
 use crate::{actors::ws_session::WsClientSession, utils::error::CodeHarmonyResponseError};
 
@@ -48,19 +49,21 @@ pub struct Student {
 #[allow(dead_code)]
 pub struct SessionRoom {
     teacher: User,
-    students: HashMap<String, Student>,
+    students: BiMap<String, Recipient<WSResponse>>,
     current_section: usize,
+    current_student_username: Option<String>,
 }
 
 impl SessionRoom {
     fn new(teacher_addr: Recipient<WSResponse>, username: String) -> Self {
         Self {
-            students: HashMap::new(),
+            students: BiMap::new(),
             teacher: User {
                 addr: teacher_addr,
                 username,
             },
             current_section: 0,
+            current_student_username: None,
         }
     }
 }
@@ -147,9 +150,7 @@ impl Handler<StudentJoin> for SessionServer {
                 .do_send(WSResponse::SetConnectedSession(msg.identifier));
             println!("Student joined session");
             // And insert the student into the list
-            session
-                .students
-                .insert(msg.username, Student { addr: msg.addr });
+            session.students.insert(msg.username, msg.addr);
         }
     }
 }
@@ -171,16 +172,34 @@ impl Handler<ControlInstruction> for SessionServer {
 
         // If setSection, get new value and session room
         // Set current_section val and send the msg to students in room
-        if instruction.len() == 2 && instruction[0] == "setSection" {
+        if instruction[0] == "setSection" && instruction.len() == 2 {
             if let Ok(new_value) = instruction[1].parse::<usize>() {
                 if let Some(session) = self.sessions.get_mut(&msg.identifier) {
                     session.current_section = new_value;
                     let msg = format!("sec {}", new_value);
                     println!("Student addresses {:?}", session.students);
-                    for student in session.students.values() {
-                        student.addr.do_send(WSResponse::Msg(msg.to_owned()));
+                    for addr in session.students.right_values() {
+                        addr.do_send(WSResponse::Msg(msg.to_owned()));
                         println!("Sent instruction");
                     }
+                }
+            }
+        } else if instruction[0] == "subscribe" && instruction.len() == 2 {
+            if let Some(session) = self.sessions.get_mut(&msg.identifier) {
+                if let Some(student_addr) = session.students.get_by_left(instruction[1]) {
+                    // Unsub the old student if there is one and it isn't the same student
+                    if let Some(to_unsub_username) = &session.current_student_username {
+                        if to_unsub_username != instruction[1] {
+                            if let Some(to_unsub_addr) =
+                                session.students.get_by_left(to_unsub_username)
+                            {
+                                to_unsub_addr.do_send(WSResponse::Msg("unsub".to_owned()));
+                            }
+                        }
+                    }
+
+                    session.current_student_username = Some(instruction[1].to_owned());
+                    student_addr.do_send(WSResponse::Msg("subscribe".to_owned()));
                 }
             }
         }
@@ -202,11 +221,44 @@ impl Handler<GetStudentData> for SessionServer {
             if session.teacher.username == msg.username {
                 return session
                     .students
-                    .keys()
+                    .left_values()
                     .map(|username| username.to_owned())
                     .collect::<Vec<String>>();
             }
         }
         vec![]
+    }
+}
+
+#[derive(Message, Debug)]
+#[rtype(result = "()")]
+pub struct UpdateStudentCode {
+    pub identifier: SessionIdentifier,
+    pub username: String,
+    pub code: String,
+    pub student_addr: Recipient<WSResponse>,
+}
+
+impl Handler<UpdateStudentCode> for SessionServer {
+    type Result = ();
+
+    fn handle(&mut self, msg: UpdateStudentCode, _: &mut Self::Context) -> Self::Result {
+        // If the session exists and this is the student the room is looking at,
+        // send the code to the teacher
+        if let Some(session) = self.sessions.get(&msg.identifier) {
+            if let Some(current_student_username) = &session.current_student_username {
+                if current_student_username == &msg.username {
+                    session
+                        .teacher
+                        .addr
+                        .do_send(WSResponse::Msg(format!("sUpdate {}", msg.code)));
+                    return;
+                }
+            }
+        }
+
+        // If not, tell the student we don't want to hear from them anymore
+        msg.student_addr
+            .do_send(WSResponse::Msg("unsub".to_owned()));
     }
 }
