@@ -79,7 +79,8 @@ pub fn init(cfg: &mut web::ServiceConfig) {
         .service(set_plan_section)
         .service(perform_plan_operation)
         .service(update_plan_section_name)
-        .service(update_plan_section_type);
+        .service(update_plan_section_type)
+        .service(get_plan_info_student);
 }
 
 impl TryFrom<&tokio_postgres::Row> for PlanSection {
@@ -235,6 +236,54 @@ async fn get_plan_info(
 
         // Get sections from database
         let sections = get_plan_info_query(&client, &plan_name, &username).await?;
+
+        // Return list of plans
+        return Ok(HttpResponse::Ok().json(sections));
+    }
+
+    Err(CodeHarmonyResponseError::NotLoggedIn)
+}
+
+// Get a plan for a student, checking that they have the teacher added
+#[get("/plan/info/student/{plan_name}/{teacher_name}")]
+async fn get_plan_info_student(
+    db_pool: web::Data<Pool>,
+    path: web::Path<(String, String)>,
+    session: Session,
+) -> Result<impl Responder, CodeHarmonyResponseError> {
+    if let Ok(Some(username)) = session.get::<String>("username") {
+        // Get plan name from uri
+        let (plan_name, teacher_name) = path.into_inner();
+
+        // Get db client
+        let client = db_pool
+            .get()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+        println!("Teacher - {} Student - {}", teacher_name, username);
+
+        // Check that the student has the teacher added
+        // Or that it's the teacher themselves
+        if teacher_name != username {
+            let rows = client
+                .query(
+                    "SELECT * FROM codeharmony.student_teacher WHERE student_un=$1 and teacher_un=$2",
+                    &[&username, &teacher_name],
+                )
+                .await
+                .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+            if rows.is_empty() {
+                return Err(CodeHarmonyResponseError::BadRequest(
+                    0,
+                    "Not registered to this teacher".to_string(),
+                ));
+            }
+        }
+
+        // Get sections from database
+        let sections = get_plan_info_query(&client, &plan_name, &teacher_name).await?;
 
         // Return list of plans
         return Ok(HttpResponse::Ok().json(sections));
