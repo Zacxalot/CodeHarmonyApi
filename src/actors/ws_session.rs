@@ -2,7 +2,7 @@ use actix::{Actor, ActorContext, Addr, AsyncContext, Handler, StreamHandler};
 use actix_web_actors::ws;
 
 use crate::actors::ws_server::{
-    ControlInstruction, SessionIdentifier, SessionServer, StudentJoin, TeacherJoin,
+    ControlInstruction, SessionIdentifier, SessionServer, SetStudentDoc, StudentJoin, TeacherJoin,
     UpdateStudentCode, WSResponse,
 };
 
@@ -74,6 +74,15 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsClientSession {
                     } else if split[0] == "sUpdate" {
                         if let Some(identifier) = self.connected_session.as_ref() {
                             self.addr.do_send(UpdateStudentCode {
+                                identifier: identifier.clone(),
+                                username,
+                                code: split[1].to_owned(),
+                                student_addr: addr,
+                            });
+                        }
+                    } else if split[0] == "sDoc" {
+                        if let Some(identifier) = self.connected_session.as_ref() {
+                            self.addr.do_send(SetStudentDoc {
                                 identifier: identifier.clone(),
                                 username,
                                 code: split[1].to_owned(),

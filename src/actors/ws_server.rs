@@ -262,3 +262,36 @@ impl Handler<UpdateStudentCode> for SessionServer {
             .do_send(WSResponse::Msg("unsub".to_owned()));
     }
 }
+
+#[derive(Message, Debug)]
+#[rtype(result = "()")]
+pub struct SetStudentDoc {
+    pub identifier: SessionIdentifier,
+    pub username: String,
+    pub code: String,
+    pub student_addr: Recipient<WSResponse>,
+}
+
+impl Handler<SetStudentDoc> for SessionServer {
+    type Result = ();
+
+    fn handle(&mut self, msg: SetStudentDoc, _: &mut Self::Context) -> Self::Result {
+        // If the session exists and this is the student the room is looking at,
+        // send the starting code to the teacher
+        if let Some(session) = self.sessions.get(&msg.identifier) {
+            if let Some(current_student_username) = &session.current_student_username {
+                if current_student_username == &msg.username {
+                    session
+                        .teacher
+                        .addr
+                        .do_send(WSResponse::Msg(format!("sDoc {}", msg.code)));
+                    return;
+                }
+            }
+        }
+
+        // If not, tell the student we don't want to hear from them anymore
+        msg.student_addr
+            .do_send(WSResponse::Msg("unsub".to_owned()));
+    }
+}
