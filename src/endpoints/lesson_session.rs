@@ -7,7 +7,7 @@ use chrono::NaiveDateTime;
 use deadpool_postgres::{Object, Pool};
 use deadpool_redis::redis::cmd;
 use futures::join;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::json;
 use tokio_postgres::error::SqlState;
 
@@ -171,26 +171,28 @@ async fn start_session(
     Ok(HttpResponse::Ok())
 }
 
-#[derive(Deserialize)]
-struct SaveCode {
-    text: String,
-}
-
 // Save code to redis
 #[post("session/save/{plan_name}/{session_name}/{host}/{section_name}")]
 async fn save_code(
     redis_pool: web::Data<deadpool_redis::Pool>,
     path: web::Path<(String, String, String, String)>,
-    payload: web::Json<SaveCode>,
+    code: String,
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
     // Get vars from path
-    let (host, plan_name, session_name, section_name) = path.into_inner();
+    let (plan_name, session_name, host, section_name) = path.into_inner();
 
     // Get the Redis client
     let mut client = redis_pool
         .get()
         .await
         .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+    if serde_json::from_str::<Vec<String>>(&code).is_err() {
+        return Err(CodeHarmonyResponseError::BadRequest(
+            0,
+            "Invalid code data".to_string(),
+        ));
+    }
 
     // Save code to hashset
     cmd("HSET")
@@ -200,7 +202,7 @@ async fn save_code(
                 host, plan_name, session_name, section_name
             ),
             "solution",
-            &payload.text,
+            &code,
         ])
         .query_async(&mut client)
         .await
