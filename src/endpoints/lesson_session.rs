@@ -12,10 +12,7 @@ use serde_json::json;
 use tokio_postgres::error::SqlState;
 
 use crate::{
-    actors::{
-        teacher_code_manager::TeacherCodeManager,
-        ws_server::{GetStudentData, SessionIdentifier, SessionServer},
-    },
+    actors::ws_server::{GetStudentData, SessionIdentifier, SessionServer},
     lesson_plan::get_plan_info_query,
     utils::error::CodeHarmonyResponseError,
 };
@@ -180,7 +177,7 @@ struct SaveCode {
 }
 
 // Save code to redis
-#[post("session/save/{host}/{plan_name}/{session_name}/{section_name}")]
+#[post("session/save/{plan_name}/{session_name}/{host}/{section_name}")]
 async fn save_code(
     redis_pool: web::Data<deadpool_redis::Pool>,
     path: web::Path<(String, String, String, String)>,

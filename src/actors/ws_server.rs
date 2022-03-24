@@ -1,8 +1,8 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use actix::{Actor, Addr, Context, Handler, Message, Recipient};
 use actix_session::Session;
-use actix_web::{web, Error, HttpRequest, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use bimap::BiMap;
 
@@ -149,7 +149,12 @@ impl Handler<StudentJoin> for SessionServer {
             msg.addr
                 .do_send(WSResponse::SetConnectedSession(msg.identifier));
             println!("Student joined session");
-            // And insert the student into the list
+
+            // Tell the student what section we're on
+            msg.addr
+                .do_send(WSResponse::Msg(format!("sec {}", session.current_section)));
+
+            // Insert the student into the list
             session.students.insert(msg.username, msg.addr);
         }
     }
