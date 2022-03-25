@@ -2,7 +2,7 @@ use std::convert::TryFrom;
 
 use actix::Addr;
 use actix_session::Session;
-use actix_web::{get, post, web, HttpResponse, Responder};
+use actix_web::{get, http::header::ContentType, post, web, HttpResponse, Responder};
 use chrono::NaiveDateTime;
 use deadpool_postgres::{Object, Pool};
 use deadpool_redis::redis::cmd;
@@ -28,6 +28,7 @@ pub fn init(cfg: &mut web::ServiceConfig) {
         .service(get_session_info)
         .service(start_session)
         .service(save_code)
+        .service(get_code)
         .service(get_active_sessions_for_user)
         .service(get_session_students);
 }
@@ -177,39 +178,94 @@ async fn save_code(
     redis_pool: web::Data<deadpool_redis::Pool>,
     path: web::Path<(String, String, String, String)>,
     code: String,
+    session: Session,
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
-    // Get vars from path
-    let (plan_name, session_name, host, section_name) = path.into_inner();
+    if let Ok(Some(username)) = session.get::<String>("username") {
+        // Get vars from path
+        let (plan_name, session_name, host, section_name) = path.into_inner();
 
-    // Get the Redis client
-    let mut client = redis_pool
-        .get()
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+        // Get the Redis client
+        let mut client = redis_pool
+            .get()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
-    if serde_json::from_str::<Vec<String>>(&code).is_err() {
-        return Err(CodeHarmonyResponseError::BadRequest(
-            0,
-            "Invalid code data".to_string(),
-        ));
+        if serde_json::from_str::<Vec<String>>(&code).is_err() {
+            return Err(CodeHarmonyResponseError::BadRequest(
+                0,
+                "Invalid code data".to_string(),
+            ));
+        }
+
+        // Save code to hashset
+        cmd("HSET")
+            .arg(&[
+                &format!(
+                    "session:sessions:{}:{}:{}:{}:{}",
+                    host, plan_name, session_name, section_name, username
+                ),
+                "solution",
+                &code,
+            ])
+            .query_async(&mut client)
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+        // Return Ok!
+        return Ok(HttpResponse::Ok());
     }
 
-    // Save code to hashset
-    cmd("HSET")
-        .arg(&[
-            &format!(
-                "session:sessions:{}:{}:{}:{}:student1",
-                host, plan_name, session_name, section_name
-            ),
-            "solution",
-            &code,
-        ])
-        .query_async(&mut client)
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+    Err(CodeHarmonyResponseError::NotLoggedIn)
+}
 
-    // Return Ok!
-    Ok(HttpResponse::Ok())
+// Save code to redis
+#[get("session/save/{plan_name}/{session_name}/{host}/{section_name}")]
+async fn get_code(
+    redis_pool: web::Data<deadpool_redis::Pool>,
+    path: web::Path<(String, String, String, String)>,
+    session: Session,
+) -> Result<impl Responder, CodeHarmonyResponseError> {
+    if let Ok(Some(username)) = session.get::<String>("username") {
+        // Get vars from path
+        let (plan_name, session_name, host, section_name) = path.into_inner();
+
+        // Get the Redis client
+        let mut client = redis_pool
+            .get()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+        println!(
+            "session:sessions:{}:{}:{}:{}:{}",
+            host, plan_name, session_name, section_name, username
+        );
+
+        // Save code to hashset
+        let code: String = cmd("HGET")
+            .arg(&[
+                &format!(
+                    "session:sessions:{}:{}:{}:{}:{}",
+                    host, plan_name, session_name, section_name, username
+                ),
+                "solution",
+            ])
+            .query_async(&mut client)
+            .await
+            .unwrap_or_default();
+
+        println!("{}", code);
+
+        if code.is_empty() {
+            return Err(CodeHarmonyResponseError::NotFound);
+        }
+
+        // Return Ok!
+        return Ok(HttpResponse::Ok()
+            .content_type(ContentType::json())
+            .body(code));
+    }
+
+    Err(CodeHarmonyResponseError::NotLoggedIn)
 }
 
 #[derive(pg_mapper::TryFromRow, Serialize)]

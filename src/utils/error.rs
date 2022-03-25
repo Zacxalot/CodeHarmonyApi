@@ -24,6 +24,8 @@ pub enum CodeHarmonyResponseError {
     CouldntParseRows,
     #[error("{{\"errcode\":500, \"msg\": \"Websocket server unavailable\"}}")]
     WebsocketsUnavailable,
+    #[error("{{\"errcode\":404, \"msg\": \"No content found\"}}")]
+    NotFound,
 }
 
 impl error::ResponseError for CodeHarmonyResponseError {
@@ -37,6 +39,7 @@ impl error::ResponseError for CodeHarmonyResponseError {
             CodeHarmonyResponseError::DatabaseQueryFailed => StatusCode::INTERNAL_SERVER_ERROR,
             CodeHarmonyResponseError::CouldntParseRows => StatusCode::INTERNAL_SERVER_ERROR,
             CodeHarmonyResponseError::WebsocketsUnavailable => StatusCode::INTERNAL_SERVER_ERROR,
+            CodeHarmonyResponseError::NotFound => StatusCode::NOT_FOUND,
         }
     }
 
