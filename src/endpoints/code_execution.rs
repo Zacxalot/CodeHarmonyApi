@@ -38,17 +38,6 @@ pub struct PistonResponse {
     version: String,
 }
 
-// Display for piston response it to turn it into json
-// Makes returning the error easier
-impl Display for PistonResponse {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Ok(json) = serde_json::to_string(self) {
-            return write!(f, "{}", json);
-        }
-        Err(std::fmt::Error)
-    }
-}
-
 #[derive(Deserialize)]
 struct RunRequest {
     piston: PistonRequest,
@@ -125,12 +114,12 @@ async fn execute_code(
         // Get the coding_data from the row
         if let Some(row) = rows.into_iter().next() {
             if let Ok(json) = row.try_get::<usize, Json<CodingData>>(0) {
-                // If we get the expected output, return ok with the body
+                // Return Accepted with the body if it's correct
                 if body.run.stdout.trim() == json.0.expectedOutput {
                     return Ok(HttpResponse::Accepted().json(body));
                 } else {
-                    // Return error with body if it's wrong
-                    return Err(CodeHarmonyResponseError::IncorrectAnswer(body));
+                    // Just return Ok with body if it's wrong
+                    return Ok(HttpResponse::Ok().json(body));
                 }
             }
         }
