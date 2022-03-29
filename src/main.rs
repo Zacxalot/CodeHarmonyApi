@@ -17,6 +17,8 @@ use deadpool_postgres::{ManagerConfig, RecyclingMethod};
 use dotenv::dotenv;
 use tokio_postgres::NoTls;
 
+use crate::endpoints::code_execution;
+
 mod actors;
 mod endpoints;
 mod utils;
@@ -70,6 +72,7 @@ async fn main() -> std::io::Result<()> {
             .configure(lesson_session::init)
             .configure(account_management::init)
             .configure(student_teacher::init)
+            .configure(code_execution::init)
     })
     .bind(addr)?
     .run()
