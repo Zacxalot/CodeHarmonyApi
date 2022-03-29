@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 
+use crate::{actors::ws_session::WsClientSession, utils::error::CodeHarmonyResponseError};
 use actix::{Actor, Addr, Context, Handler, Message, Recipient};
 use actix_session::Session;
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use bimap::BiMap;
-
-use crate::{actors::ws_session::WsClientSession, utils::error::CodeHarmonyResponseError};
 
 pub async fn session_service(
     req: HttpRequest,

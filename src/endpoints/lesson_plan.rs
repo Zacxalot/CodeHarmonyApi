@@ -33,12 +33,12 @@ struct PlanSectionListResponse {
     sections: Vec<PlanSection>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, pg_mapper::TryFromRow)]
 #[allow(non_snake_case)]
 pub struct CodingData {
-    language: String,
-    startingCode: String,
-    expectedOutput: String,
+    pub language: String,
+    pub startingCode: String,
+    pub expectedOutput: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

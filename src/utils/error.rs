@@ -5,6 +5,8 @@ use actix_web::{
 };
 use thiserror::Error;
 
+use crate::endpoints::code_execution::PistonResponse;
+
 #[allow(dead_code)]
 #[derive(Error, Debug)]
 pub enum CodeHarmonyResponseError {
@@ -26,6 +28,8 @@ pub enum CodeHarmonyResponseError {
     WebsocketsUnavailable,
     #[error("{{\"errcode\":404, \"msg\": \"No content found\"}}")]
     NotFound,
+    #[error("{{\"errcode\": 1000, \"output\": {0}}}")]
+    IncorrectAnswer(PistonResponse),
 }
 
 impl error::ResponseError for CodeHarmonyResponseError {
@@ -40,6 +44,7 @@ impl error::ResponseError for CodeHarmonyResponseError {
             CodeHarmonyResponseError::CouldntParseRows => StatusCode::INTERNAL_SERVER_ERROR,
             CodeHarmonyResponseError::WebsocketsUnavailable => StatusCode::INTERNAL_SERVER_ERROR,
             CodeHarmonyResponseError::NotFound => StatusCode::NOT_FOUND,
+            CodeHarmonyResponseError::IncorrectAnswer(_) => StatusCode::OK,
         }
     }
 
