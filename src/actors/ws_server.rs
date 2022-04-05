@@ -6,6 +6,8 @@ use actix_session::Session;
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use bimap::BiMap;
+use serde_json::json;
+use uuid::Uuid;
 
 pub async fn session_service(
     req: HttpRequest,
@@ -297,5 +299,30 @@ impl Handler<SetStudentDoc> for SessionServer {
         // If not, tell the student we don't want to hear from them anymore
         msg.student_addr
             .do_send(WSResponse::Msg("unsub".to_owned()));
+    }
+}
+
+#[derive(Message, Debug)]
+#[rtype(result = "()")]
+pub struct SendTextMessage {
+    pub identifier: SessionIdentifier,
+    pub username: String,
+    pub text: String,
+}
+
+impl Handler<SendTextMessage> for SessionServer {
+    type Result = ();
+
+    fn handle(&mut self, msg: SendTextMessage, _: &mut Self::Context) -> Self::Result {
+        if let Some(session) = self.sessions.get_mut(&msg.identifier) {
+            let response = json!({"username":msg.username, "uuid":Uuid::new_v4().to_string(), "text": msg.text});
+            let msg = format!("txtm {}", response);
+
+            println!("{}", response);
+
+            for addr in session.students.right_values() {
+                addr.do_send(WSResponse::Msg(msg.to_owned()));
+            }
+        }
     }
 }

@@ -38,3 +38,4 @@ bimap = "0.6.2"
 rand = "0.8.5"
 dotenv = "0.15.0"
 itertools = "0.10.3"
+uuid = { version = "0.8.2", features = ["v4"] }
