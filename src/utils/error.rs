@@ -5,8 +5,6 @@ use actix_web::{
 };
 use thiserror::Error;
 
-use crate::endpoints::code_execution::PistonResponse;
-
 #[allow(dead_code)]
 #[derive(Error, Debug)]
 pub enum CodeHarmonyResponseError {

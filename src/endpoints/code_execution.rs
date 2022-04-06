@@ -3,7 +3,7 @@ use actix_session::Session;
 use actix_web::{http::header, post, web, HttpResponse, Responder};
 use awc::Client;
 use serde::{Deserialize, Serialize};
-use std::{env, fmt::Display};
+use std::env;
 use tokio_postgres::types::Json;
 
 pub fn init(cfg: &mut web::ServiceConfig) {

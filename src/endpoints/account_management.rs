@@ -6,9 +6,9 @@ use argon2::{
     password_hash::{rand_core::OsRng, SaltString},
     Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tokio_postgres::Row;
+use tokio_postgres::{error::SqlState, Row};
 
 use crate::utils::error::CodeHarmonyResponseError;
 
@@ -20,7 +20,7 @@ pub fn init(cfg: &mut web::ServiceConfig) {
         .service(check_logged_in);
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct LoginData {
     username: String,
     password: String,
@@ -87,7 +87,7 @@ async fn logout(session: Session) -> Result<impl Responder, CodeHarmonyResponseE
     Ok(HttpResponse::Ok())
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct RegisterData {
     username: String,
     password: String,
@@ -124,7 +124,15 @@ async fn register(
             &[&payload.username, &password_hash, &payload.email],
         )
         .await
-        .map_err(|_| CodeHarmonyResponseError::InternalError(1, "Couldn't register".to_owned()))?;
+        .map_err(|err| match err.as_db_error() {
+            Some(err) => match *err.code() {
+                SqlState::UNIQUE_VIOLATION => {
+                    CodeHarmonyResponseError::BadRequest(0, "User already exists".to_string())
+                }
+                _ => CodeHarmonyResponseError::DatabaseConnection,
+            },
+            None => CodeHarmonyResponseError::DatabaseConnection,
+        })?;
 
     // Log the user in
     session.insert("username", &payload.username).map_err(|_| {
@@ -148,5 +156,93 @@ async fn check_logged_in(session: Session) -> Result<impl Responder, CodeHarmony
             0,
             "Not logged in".to_owned(),
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use actix_web::{http::Method, test, App};
+
+    use super::*;
+
+    use crate::{create_cookie_session, create_postgres_pool};
+
+    const USERNAME: &str = "username_test";
+    const PASSWORD: &str = "password_test";
+
+    #[actix_web::test]
+    async fn test_register() {
+        let app = test::init_service(
+            App::new()
+                .app_data(create_cookie_session())
+                .app_data(web::Data::new(create_postgres_pool()))
+                .service(register),
+        )
+        .await;
+
+        let login_details: RegisterData = RegisterData {
+            username: USERNAME.to_owned(),
+            password: PASSWORD.to_owned(),
+            email: "testy@testmail.com".to_owned(),
+        };
+
+        // Create request with jsonified login_details
+        let req = test::TestRequest::with_uri("/account/register")
+            .method(Method::POST)
+            .set_json(login_details)
+            .to_request();
+
+        // Call the endpoint
+        let resp = test::call_service(&app, req).await;
+
+        // Get status and body
+        let status = resp.status();
+        let body = format!("{:?}", resp.into_body());
+
+        println!("{}", body);
+
+        // If the request was a success or if the user already exists it's good!
+        assert!(status.is_success() || body.contains("User already exists"));
+    }
+
+    #[actix_web::test]
+    async fn test_login_logout() {
+        let app = test::init_service(
+            App::new()
+                .app_data(create_cookie_session())
+                .app_data(web::Data::new(create_postgres_pool()))
+                .service(login)
+                .service(logout),
+        )
+        .await;
+
+        let login_details: LoginData = LoginData {
+            username: USERNAME.to_owned(),
+            password: PASSWORD.to_owned(),
+        };
+
+        // Create request with jsonified login_details
+        let req = test::TestRequest::with_uri("/account/login")
+            .method(Method::POST)
+            .set_json(login_details)
+            .to_request();
+
+        // Call the login endpoint
+        let login_resp = test::call_service(&app, req).await;
+        let login_status = login_resp.status();
+        println!("{:?}", login_resp.into_body());
+
+        // Create logout request
+        let req = test::TestRequest::with_uri("/account/logout")
+            .method(Method::POST)
+            .to_request();
+
+        // Call the logout endpoint
+        let logout_resp = test::call_service(&app, req).await;
+        let logout_status = logout_resp.status();
+        println!("{:?}", logout_resp.into_body());
+
+        // Check both requests went well!
+        assert!(login_status.is_success() && logout_status.is_success());
     }
 }
