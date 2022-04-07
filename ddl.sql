@@ -3,6 +3,8 @@ CREATE SCHEMA IF NOT EXISTS codeharmony;
 DROP TABLE IF EXISTS codeharmony.lesson_session;
 DROP TABLE IF EXISTS codeharmony.lesson_plan_section;
 DROP TABLE IF EXISTS codeharmony.lesson_plan;
+DROP TABLE IF EXISTS codeharmony.published_lesson_plan_section;
+DROP TABLE IF EXISTS codeharmony.published_lesson_plan;
 DROP TABLE IF EXISTS codeharmony.student_teacher;
 DROP TABLE IF EXISTS codeharmony.users;
 
@@ -22,6 +24,15 @@ CREATE TABLE codeharmony.lesson_plan (
 
 	CONSTRAINT lesson_plan_pk PRIMARY KEY (plan_name,username),
 	CONSTRAINT lesson_plan_username_fk FOREIGN KEY (username) REFERENCES codeharmony.users(username) ON DELETE CASCADE
+);
+
+CREATE TABLE codeharmony.published_lesson_plan (
+	plan_name VARCHAR(128) NOT NULL,
+	username VARCHAR(32) NOT NULL,
+	description VARCHAR(300) NOT NULL DEFAULT '',
+
+	CONSTRAINT published_lesson_plan_pk PRIMARY KEY (plan_name,username),
+	CONSTRAINT published_lesson_plan_username_fk FOREIGN KEY (username) REFERENCES codeharmony.users(username) ON DELETE CASCADE
 );
 
 CREATE TABLE codeharmony.lesson_session (
@@ -48,6 +59,20 @@ CREATE TABLE codeharmony.lesson_plan_section (
 	CONSTRAINT plan_section_name_length CHECK (length(section_name) >= 1)
 );
 
+CREATE TABLE codeharmony.published_lesson_plan_section (
+	plan_name VARCHAR(128) NOT NULL,
+	username VARCHAR(32) NOT NULL,
+	section_elements JSONB NOT null default '[]',
+	order_pos int2 NOT NULL,
+	coding_data JSONB NOT NULL DEFAULT '{"language": "python", "startingCode": "", "expectedOutput": ""}',
+	section_name VARCHAR(64) NOT NULL,
+	section_type CHAR(8) NOT NULL,
+
+	CONSTRAINT published_lesson_plan_section_pk PRIMARY KEY (plan_name,username,section_name),
+	CONSTRAINT published_lesson_plan_section_plan_fk FOREIGN KEY (username,plan_name) REFERENCES codeharmony.published_lesson_plan(username,plan_name) ON DELETE CASCADE,
+	CONSTRAINT published_plan_section_name_length CHECK (length(section_name) >= 1)
+);
+
 CREATE TABLE codeharmony.student_teacher(
 	student_un VARCHAR (32) NOT NULL,
 	teacher_un VARCHAR (32) NOT NULL,
@@ -65,6 +90,20 @@ INSERT INTO codeharmony.users (username,hash,email) VALUES('user1','$argon2id$v=
 INSERT INTO codeharmony.lesson_plan (plan_name, username) VALUES('test', 'user1');
 INSERT INTO codeharmony.lesson_plan_section (plan_name,username,section_elements,section_name,section_type, order_pos, coding_data) 
 VALUES('test','user1',
+'[
+	{"elType":"Typography","props":{"variant":"h1"},"children":{"String":"Test"}},
+	{"elType":"Typography","props":{"variant":"p"},"children":{"String":"This is just a paragraph"}},
+	{"elType":"Typography","props":{"variant":"h1"},"children":{"String":"Test2"}}
+]',
+'Introduction',
+'LECTURE',
+0,
+'{"language":"python", "startingCode":"", "expectedOutput":""}');
+
+INSERT INTO codeharmony.published_lesson_plan (plan_name, username) VALUES('I am published', 'user1');
+
+INSERT INTO codeharmony.published_lesson_plan_section (plan_name,username,section_elements,section_name,section_type, order_pos, coding_data) 
+VALUES('I am published','user1',
 '[
 	{"elType":"Typography","props":{"variant":"h1"},"children":{"String":"Test"}},
 	{"elType":"Typography","props":{"variant":"p"},"children":{"String":"This is just a paragraph"}},
