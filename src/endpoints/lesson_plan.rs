@@ -80,7 +80,8 @@ pub fn init(cfg: &mut web::ServiceConfig) {
         .service(perform_plan_operation)
         .service(update_plan_section_name)
         .service(update_plan_section_type)
-        .service(get_plan_info_student);
+        .service(get_plan_info_student)
+        .service(delete_plan);
 }
 
 impl TryFrom<&tokio_postgres::Row> for PlanSection {
@@ -565,5 +566,39 @@ async fn update_plan_section_type(
         return Ok(HttpResponse::Ok());
     }
 
+    Err(CodeHarmonyResponseError::NotLoggedIn)
+}
+
+#[post("/plan/delete/{plan_name}")]
+async fn delete_plan(
+    path: web::Path<String>,
+    db_pool: web::Data<Pool>,
+    session: Session,
+) -> Result<impl Responder, CodeHarmonyResponseError> {
+    // Get plan_name from path
+    let plan_name = path.into_inner();
+
+    // Get username
+    if let Ok(Some(username)) = session.get::<String>("username") {
+        // Get db client
+        let client = db_pool
+            .get()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+        const STATEMENT: &str =
+            "DELETE FROM codeharmony.lesson_plan WHERE plan_name=$1 AND username = $2";
+
+        client
+            .query(STATEMENT, &[&plan_name, &username])
+            .await
+            .map_err(|e| {
+                println!("{:?}", e);
+                CodeHarmonyResponseError::InternalError(0, "Couldn't delete plan".to_string())
+            })?;
+
+        // Return Ok!
+        return Ok(HttpResponse::Ok());
+    }
     Err(CodeHarmonyResponseError::NotLoggedIn)
 }

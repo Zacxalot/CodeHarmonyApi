@@ -21,7 +21,7 @@ CREATE TABLE codeharmony.lesson_plan (
 	username VARCHAR(32) NOT NULL,
 
 	CONSTRAINT lesson_plan_pk PRIMARY KEY (plan_name,username),
-	CONSTRAINT lesson_plan_username_fk FOREIGN KEY (username) REFERENCES codeharmony.users(username)
+	CONSTRAINT lesson_plan_username_fk FOREIGN KEY (username) REFERENCES codeharmony.users(username) ON DELETE CASCADE
 );
 
 CREATE TABLE codeharmony.lesson_session (
@@ -31,7 +31,7 @@ CREATE TABLE codeharmony.lesson_session (
     username VARCHAR(32) NOT NULL,
 	
 	CONSTRAINT lesson_session_pk PRIMARY KEY (session_name,plan_name,username),
-	CONSTRAINT lesson_session_plan_name_fk FOREIGN KEY (plan_name,username) REFERENCES codeharmony.lesson_plan(plan_name,username)
+	CONSTRAINT lesson_session_plan_name_fk FOREIGN KEY (plan_name,username) REFERENCES codeharmony.lesson_plan(plan_name,username) ON DELETE CASCADE
 );
 
 CREATE TABLE codeharmony.lesson_plan_section (
@@ -44,7 +44,7 @@ CREATE TABLE codeharmony.lesson_plan_section (
 	section_type CHAR(8) NOT NULL,
 
 	CONSTRAINT lesson_plan_section_pk PRIMARY KEY (plan_name,username,section_name),
-	CONSTRAINT lesson_plan_section_plan_fk FOREIGN KEY (username,plan_name) REFERENCES codeharmony.lesson_plan(username,plan_name),
+	CONSTRAINT lesson_plan_section_plan_fk FOREIGN KEY (username,plan_name) REFERENCES codeharmony.lesson_plan(username,plan_name) ON DELETE CASCADE,
 	CONSTRAINT plan_section_name_length CHECK (length(section_name) >= 1)
 );
 
