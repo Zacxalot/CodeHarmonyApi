@@ -9,7 +9,9 @@ use crate::utils::error::CodeHarmonyResponseError;
 
 // Group all of the services together into a single init
 pub fn init(cfg: &mut web::ServiceConfig) {
-    cfg.service(publish_plan).service(search_plans);
+    cfg.service(publish_plan)
+        .service(search_plans)
+        .service(get_plans);
 }
 
 #[derive(Deserialize)]
@@ -180,6 +182,45 @@ async fn search_plans(
             })?;
 
         // Return Ok with results!
+        return Ok(HttpResponse::Ok().json(json!(results)));
+    }
+    Err(CodeHarmonyResponseError::NotLoggedIn)
+}
+
+#[get("/plan/published")]
+async fn get_plans(
+    db_pool: web::Data<deadpool_postgres::Pool>,
+    session: Session,
+) -> Result<impl Responder, CodeHarmonyResponseError> {
+    // Get username
+    if let Ok(Some(username)) = session.get::<String>("username") {
+        // Get db client
+        let client = db_pool
+            .get()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+        const ALL_STATEMENT: &str =
+            "SELECT plan_name, username, description FROM codeharmony.published_lesson_plan WHERE username = $1";
+
+        let rows = client
+            .query(ALL_STATEMENT, &[&username])
+            .await
+            .map_err(|e| {
+                println!("{:?}", e);
+                CodeHarmonyResponseError::InternalError(0, "Couldn't complete search".to_string())
+            })?;
+
+        // Convert rows into a Vec of SearchResults
+        let results = rows
+            .into_iter()
+            .map(SearchResult::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| {
+                println!("{:?}", e);
+                CodeHarmonyResponseError::InternalError(0, "Invalid rows".to_string())
+            })?;
+
         return Ok(HttpResponse::Ok().json(json!(results)));
     }
     Err(CodeHarmonyResponseError::NotLoggedIn)
