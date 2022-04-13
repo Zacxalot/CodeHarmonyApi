@@ -1,6 +1,6 @@
 use crate::{endpoints::lesson_plan::CodingData, utils::error::CodeHarmonyResponseError};
 use actix_session::Session;
-use actix_web::{http::header, post, web, HttpResponse, Responder};
+use actix_web::{post, web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use std::env;
 use tokio_postgres::types::Json;

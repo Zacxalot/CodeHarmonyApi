@@ -17,7 +17,6 @@ use endpoints::{account_management, lesson_plan, lesson_session, student_teacher
 
 use deadpool_postgres::{ManagerConfig, RecyclingMethod};
 use dotenv::dotenv;
-use tokio_postgres::NoTls;
 
 use crate::endpoints::{code_execution, publish_plan};
 
@@ -27,12 +26,9 @@ mod utils;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    // Load .ENV file
-    dotenv().ok();
-
     // Get host, port and postgres url from env
-    let host = env::var("HOST").unwrap_or_else(|_| "127.0.0.1".into());
-    let port = env::var("PORT").unwrap_or_else(|_| "8080".into());
+    let host = env::var("HOST").expect("HOST not set!");
+    let port = env::var("PORT").expect("PORT not set!");
 
     println!("Hosting on {}:{}", &host, &port);
 
