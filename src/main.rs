@@ -11,6 +11,8 @@ use actors::{
     ws_server::{session_service, SessionServer},
 };
 
+use url::Url;
+
 use endpoints::{account_management, lesson_plan, lesson_session, student_teacher};
 
 use deadpool_postgres::{ManagerConfig, RecyclingMethod};
@@ -28,9 +30,11 @@ async fn main() -> std::io::Result<()> {
     // Load .ENV file
     dotenv().ok();
 
-    // Get host address from env
-    let addr = env::var("CH_HOST").unwrap_or_else(|_| "127.0.0.1:8080".into());
-    println!("Hosting on: {}", &addr);
+    // Get host, port and postgres url from env
+    let host = env::var("HOST").unwrap_or_else(|_| "127.0.0.1".into());
+    let port = env::var("PORT").unwrap_or_else(|_| "8080".into());
+
+    println!("Hosting on {}:{}", &host, &port);
 
     let postgres_pool = create_postgres_pool();
     let redis_pool = create_redis_pool();
@@ -57,7 +61,7 @@ async fn main() -> std::io::Result<()> {
             .configure(code_execution::init)
             .configure(publish_plan::init)
     })
-    .bind(addr)?
+    .bind(format!("{}:{}", host, port))?
     .run()
     .await
 }
@@ -70,22 +74,40 @@ fn create_postgres_pool() -> deadpool_postgres::Pool {
     // Load .ENV file
     dotenv().ok();
 
-    let postgres_password =
-        env::var("POSTGRES_PASSWORD").unwrap_or_else(|_| panic!("POSTGRES_PASSWORD is undefined"));
+    let postgres_url = env::var("DATABASE_URL").expect("DATABASE_URL not set!");
+    let parsed_url = Url::parse(&postgres_url).expect("DATABASE_URL invalid!");
 
-    let postgres_host = env::var("POSTGRES_HOST").unwrap_or_else(|_| "localhost".into());
-    println!("Postgres host: {}", &postgres_host);
+    let username = parsed_url.username();
+    let password = parsed_url
+        .password()
+        .expect("Password not set in DATABASE_URL");
+    let host = parsed_url.host_str().expect("Host not set in DATABASE_URL");
+    let port = parsed_url.port().expect("Port not set in DATABASE_URL");
+    let dbname = parsed_url
+        .path_segments()
+        .expect("DBName not set in DATABASE_URL")
+        .next()
+        .expect("DBName invalid id DATABASE_URL");
 
     // Setup Postgres pool
     let mut cfg = deadpool_postgres::Config::new();
-    cfg.host = Some(postgres_host);
-    cfg.user = Some("postgres".to_string());
-    cfg.password = Some(postgres_password);
-    cfg.dbname = Some("postgres".to_string());
+    cfg.host = Some(host.to_owned());
+    cfg.port = Some(port.to_owned());
+    cfg.user = Some(username.to_owned());
+    cfg.password = Some(password.to_owned());
+    cfg.dbname = Some(dbname.to_owned());
     cfg.manager = Some(ManagerConfig {
         recycling_method: RecyclingMethod::Fast,
     });
-    cfg.create_pool(None, NoTls)
+
+    let config = rustls::ClientConfig::builder()
+        .with_safe_defaults()
+        .with_root_certificates(rustls::RootCertStore::empty())
+        .with_no_client_auth();
+
+    let tls = tokio_postgres_rustls::MakeRustlsConnect::new(config);
+
+    cfg.create_pool(None, tls)
         .expect("Couldn't start postgres_pool")
 }
 

@@ -1,0 +1,1 @@
+web: ./target/release/code_harmony_api
