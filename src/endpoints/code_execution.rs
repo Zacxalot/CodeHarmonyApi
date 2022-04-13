@@ -96,8 +96,8 @@ async fn execute_code(
         // Query db for requried coding data
         const STATEMENT:&str =
             "SELECT coding_data FROM codeharmony.lesson_plan_section lps 
-            JOIN codeharmony.student_teacher st ON lps.username=st.teacher_un
-            WHERE (student_un = $1 OR teacher_un = $1) AND plan_name = $2 AND section_name = $3 AND teacher_un = $4";
+            LEFT JOIN codeharmony.student_teacher st ON lps.username=st.teacher_un
+            WHERE (student_un = $1 OR username = $1) AND plan_name = $2 AND section_name = $3 AND teacher_un = $4";
         let rows = client
             .query(
                 STATEMENT,
