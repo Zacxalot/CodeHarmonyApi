@@ -1,7 +1,6 @@
 use crate::{endpoints::lesson_plan::CodingData, utils::error::CodeHarmonyResponseError};
 use actix_session::Session;
 use actix_web::{http::header, post, web, HttpResponse, Responder};
-use awc::Client;
 use serde::{Deserialize, Serialize};
 use std::env;
 use tokio_postgres::types::Json;
@@ -60,21 +59,23 @@ async fn execute_code(
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
     if let Ok(Some(username)) = session.get::<String>("username") {
         // Setup awc client
-        let piston_host =
-            env::var("PISTON_HOST").unwrap_or_else(|_| "http://127.0.0.1:2000".into());
-
-        let client = Client::default();
+        let piston_host = env::var("PISTON_HOST").unwrap_or_else(|_| "https://emkc.org".into());
+        let piston_path =
+            env::var("PISTON_PATH").unwrap_or_else(|_| "/api/v2/piston/execute".into());
 
         // Stringify json data
         let request_data = serde_json::to_string(&payload.piston).map_err(|_| {
             CodeHarmonyResponseError::BadRequest(0, "Couldn't parse request data".to_owned())
         })?;
 
+        let client = reqwest::Client::new();
+
         //  Make request to piston API
-        let mut response = client
-            .post(format!("{}/api/v2/execute", piston_host))
-            .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
-            .send_body(request_data)
+        let response = client
+            .post(format!("{}{}", piston_host, piston_path))
+            .header("content-type", "application/json")
+            .body(request_data)
+            .send()
             .await
             .map_err(|e| {
                 println!("{:?}", e);
