@@ -320,9 +320,16 @@ impl Handler<SendTextMessage> for SessionServer {
 
             println!("{}", response);
 
+            // Send message to all students
             for addr in session.students.right_values() {
                 addr.do_send(WSResponse::Msg(msg.to_owned()));
             }
+
+            // And the teacher
+            session
+                .teacher
+                .addr
+                .do_send(WSResponse::Msg(msg.to_owned()));
         }
     }
 }
