@@ -326,10 +326,7 @@ impl Handler<SendTextMessage> for SessionServer {
             }
 
             // And the teacher
-            session
-                .teacher
-                .addr
-                .do_send(WSResponse::Msg(msg.to_owned()));
+            session.teacher.addr.do_send(WSResponse::Msg(msg));
         }
     }
 }
