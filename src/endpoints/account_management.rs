@@ -40,17 +40,20 @@ async fn login(
     session: Session,
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
     // Get db client
-    let client = db_pool
-        .get()
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+    let client = db_pool.get().await.map_err(|e| {
+        eprintln!("{:?}", e);
+        CodeHarmonyResponseError::DatabaseConnection
+    })?;
 
     // Get the username and hash
     const STATEMENT: &str = "SELECT username, hash FROM codeharmony.users WHERE username=$1";
     let rows: Vec<Row> = client
         .query(STATEMENT, &[&payload.username])
         .await
-        .map_err(|_| CodeHarmonyResponseError::BadRequest(0, "User not found".to_owned()))?;
+        .map_err(|e| {
+            eprint!("{:?}", e);
+            CodeHarmonyResponseError::BadRequest(0, "User not found".to_owned())
+        })?;
 
     // If the user exists and could be deserialized
     // Verify the hash and login if it's correct
@@ -61,13 +64,15 @@ async fn login(
 
         Argon2::default()
             .verify_password(payload.password.as_bytes(), &parsed_hash)
-            .map_err(|_| {
+            .map_err(|e| {
+                eprintln!("{:?}", e);
                 CodeHarmonyResponseError::BadRequest(3, "Incorrect password".to_owned())
             })?;
 
         session
             .insert("username", &user_data.username)
-            .map_err(|_| {
+            .map_err(|e| {
+                eprintln!("{:?}", e);
                 CodeHarmonyResponseError::InternalError(5, "Couldn't save session".to_owned())
             })?;
 
