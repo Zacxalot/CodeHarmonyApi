@@ -11,6 +11,7 @@ use actors::{
     ws_server::{session_service, SessionServer},
 };
 
+use rustls_native_certs::load_native_certs;
 use url::Url;
 
 use endpoints::{account_management, lesson_plan, lesson_session, student_teacher};
@@ -26,6 +27,9 @@ mod utils;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    // Load .ENV file
+    dotenv().ok();
+
     // Get host, port and postgres url from env
     let host = env::var("HOST").expect("HOST not set!");
     let port = env::var("PORT").expect("PORT not set!");
@@ -96,9 +100,17 @@ fn create_postgres_pool() -> deadpool_postgres::Pool {
         recycling_method: RecyclingMethod::Fast,
     });
 
+    let mut roots = rustls::RootCertStore::empty();
+    for cert in rustls_native_certs::load_native_certs().expect("could not load platform certs") {
+        match roots.add(&rustls::Certificate(cert.0)) {
+            Ok(_) => {}
+            Err(e) => println!("Invalid Cert - {:?}", e),
+        };
+    }
+
     let config = rustls::ClientConfig::builder()
         .with_safe_defaults()
-        .with_root_certificates(rustls::RootCertStore::empty())
+        .with_root_certificates(roots)
         .with_no_client_auth();
 
     let tls = tokio_postgres_rustls::MakeRustlsConnect::new(config);
