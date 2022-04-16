@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, fs};
 
 use actix::Actor;
 use actix_session::CookieSession;
@@ -11,7 +11,7 @@ use actors::{
     ws_server::{session_service, SessionServer},
 };
 
-use rustls_native_certs::load_native_certs;
+use native_tls::{Certificate, TlsConnector};
 use url::Url;
 
 use endpoints::{account_management, lesson_plan, lesson_session, student_teacher};
@@ -36,7 +36,7 @@ async fn main() -> std::io::Result<()> {
 
     println!("Hosting on {}:{}", &host, &port);
 
-    let postgres_pool = create_postgres_pool();
+    let postgres_pool = create_postgres_pool().await;
     let redis_pool = create_redis_pool();
 
     // Setup lesson session server
@@ -70,7 +70,7 @@ fn create_cookie_session() -> CookieSession {
     CookieSession::signed(&[0; 32]).secure(false)
 }
 
-fn create_postgres_pool() -> deadpool_postgres::Pool {
+async fn create_postgres_pool() -> deadpool_postgres::Pool {
     // Load .ENV file
     dotenv().ok();
 
@@ -99,24 +99,32 @@ fn create_postgres_pool() -> deadpool_postgres::Pool {
     cfg.manager = Some(ManagerConfig {
         recycling_method: RecyclingMethod::Fast,
     });
+    cfg.ssl_mode = Some(deadpool_postgres::SslMode::Require);
+    cfg.application_name = Some("Code_Harmony server".to_owned());
 
-    let mut roots = rustls::RootCertStore::empty();
-    for cert in rustls_native_certs::load_native_certs().expect("could not load platform certs") {
-        match roots.add(&rustls::Certificate(cert.0)) {
-            Ok(_) => {}
-            Err(e) => println!("Invalid Cert - {:?}", e),
-        };
+    let cert = fs::read("CA_CERT.pem").expect("Couldn't find CA_CERT.pem");
+    let cert = Certificate::from_pem(&cert).expect("Couldn't parse CA cert");
+
+    let connector = TlsConnector::builder()
+        .add_root_certificate(cert)
+        .danger_accept_invalid_hostnames(true)
+        .build()
+        .expect("Couldn't build connector");
+    let connector = postgres_native_tls::MakeTlsConnector::new(connector);
+
+    let pool = cfg
+        .create_pool(None, connector)
+        .expect("Couldn't start postgres_pool");
+
+    match pool.get().await {
+        Ok(_) => {}
+        Err(e) => {
+            println!("{:?}", e);
+            panic!("Couldn't connect to database")
+        }
     }
 
-    let config = rustls::ClientConfig::builder()
-        .with_safe_defaults()
-        .with_root_certificates(roots)
-        .with_no_client_auth();
-
-    let tls = tokio_postgres_rustls::MakeRustlsConnect::new(config);
-
-    cfg.create_pool(None, tls)
-        .expect("Couldn't start postgres_pool")
+    pool
 }
 
 fn create_redis_pool() -> deadpool_redis::Pool {
