@@ -74,6 +74,8 @@ async fn create_postgres_pool() -> deadpool_postgres::Pool {
     // Load .ENV file
     dotenv().ok();
 
+    println!("Loaded env");
+
     let postgres_url = env::var("DATABASE_URL").expect("DATABASE_URL not set!");
     let parsed_url = Url::parse(&postgres_url).expect("DATABASE_URL invalid!");
 
@@ -89,6 +91,8 @@ async fn create_postgres_pool() -> deadpool_postgres::Pool {
         .next()
         .expect("DBName invalid id DATABASE_URL");
 
+    println!("Got vars");
+
     // Setup Postgres pool
     let mut cfg = deadpool_postgres::Config::new();
     cfg.host = Some(host.to_owned());
@@ -102,8 +106,15 @@ async fn create_postgres_pool() -> deadpool_postgres::Pool {
     cfg.ssl_mode = Some(deadpool_postgres::SslMode::Require);
     cfg.application_name = Some("Code_Harmony server".to_owned());
 
+    println!("Created config");
+
     let cert = fs::read("CA_CERT.pem").expect("Couldn't find CA_CERT.pem");
+
+    println!("Opened CA_CERT.pem");
+
     let cert = Certificate::from_pem(&cert).expect("Couldn't parse CA cert");
+
+    println!("Read certs");
 
     let connector = TlsConnector::builder()
         .add_root_certificate(cert)
@@ -112,9 +123,13 @@ async fn create_postgres_pool() -> deadpool_postgres::Pool {
         .expect("Couldn't build connector");
     let connector = postgres_native_tls::MakeTlsConnector::new(connector);
 
+    println!("Created connector");
+
     let pool = cfg
         .create_pool(None, connector)
         .expect("Couldn't start postgres_pool");
+
+    println!("Postgres pool created");
 
     match pool.get().await {
         Ok(_) => {}
@@ -123,6 +138,8 @@ async fn create_postgres_pool() -> deadpool_postgres::Pool {
             panic!("Couldn't connect to database")
         }
     }
+
+    println!("Postgres pool valid");
 
     pool
 }

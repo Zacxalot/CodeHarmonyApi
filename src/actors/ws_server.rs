@@ -15,7 +15,10 @@ pub async fn session_service(
     srv: web::Data<Addr<SessionServer>>,
     session: Session,
 ) -> Result<HttpResponse, CodeHarmonyResponseError> {
+    println!("{:?}", &req);
+    println!("WS Init request");
     if let Ok(Some(username)) = session.get::<String>("username") {
+        println!("Starting ws session");
         return ws::start(
             WsClientSession {
                 addr: srv.get_ref().clone(),
@@ -25,7 +28,8 @@ pub async fn session_service(
             &req,
             stream,
         )
-        .map_err(|_| {
+        .map_err(|e| {
+            eprintln!("{:?}", e);
             CodeHarmonyResponseError::InternalError(
                 0,
                 "Couldn't create websocket connection".into(),
