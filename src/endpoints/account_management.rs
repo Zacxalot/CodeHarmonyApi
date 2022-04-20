@@ -58,7 +58,8 @@ async fn login(
     // If the user exists and could be deserialized
     // Verify the hash and login if it's correct
     if let Some(Ok(user_data)) = rows.into_iter().map(LoginDBData::try_from).next() {
-        let parsed_hash = PasswordHash::new(&user_data.hash).map_err(|_| {
+        let parsed_hash = PasswordHash::new(&user_data.hash).map_err(|e| {
+            eprintln!("{:?}", e);
             CodeHarmonyResponseError::InternalError(1, "Couldn't decode password hash".to_owned())
         })?;
 
@@ -146,6 +147,14 @@ async fn register(
             "Couldn't save session, account still created".to_owned(),
         )
     })?;
+
+    // Add the user as their own teacher
+    const TEACHERSTATEMENT: &str =
+        "INSERT INTO codeharmony.student_teacher(teacher_un, student_un) VALUES($1,$2)";
+    client
+        .query(TEACHERSTATEMENT, &[&payload.username, &payload.username])
+        .await
+        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
     Ok(HttpResponse::Ok())
 }

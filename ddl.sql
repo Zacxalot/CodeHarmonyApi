@@ -1,5 +1,6 @@
 CREATE SCHEMA IF NOT EXISTS codeharmony;
 
+DROP TABLE IF EXISTS codeharmony.code_submission;
 DROP TABLE IF EXISTS codeharmony.lesson_session;
 DROP TABLE IF EXISTS codeharmony.lesson_plan_section;
 DROP TABLE IF EXISTS codeharmony.lesson_plan;
@@ -80,6 +81,19 @@ CREATE TABLE codeharmony.student_teacher(
 	CONSTRAINT student_teacher_pk PRIMARY KEY (student_un, teacher_un),
 	CONSTRAINT teacher_un_fk FOREIGN KEY (teacher_un) REFERENCES codeharmony.users(username),
 	CONSTRAINT student_un_fk FOREIGN KEY (student_un) REFERENCES codeharmony.users(username)
+);
+
+CREATE TABLE codeharmony.code_submission(
+	teacher_un VARCHAR (32) NOT NULL,
+	plan_name VARCHAR(128) NOT NULL,
+	section_name VARCHAR(64) NOT NULL,
+	session_name VARCHAR(128) NOT NULL,
+	student_un VARCHAR (32) NOT NULL,
+	code TEXT NOT NULL,
+	CONSTRAINT code_submission_pk PRIMARY KEY (teacher_un, plan_name, section_name, session_name, student_un),
+	CONSTRAINT code_submission_plan_fk FOREIGN KEY (teacher_un,plan_name,section_name) REFERENCES codeharmony.lesson_plan_section(username,plan_name,section_name),
+	CONSTRAINT code_submission_session_fk FOREIGN KEY (plan_name, session_name, teacher_un) REFERENCES codeharmony.lesson_session(plan_name, session_name, username),
+	CONSTRAINT code_submission_student_teacher_fk FOREIGN KEY (teacher_un, student_un) REFERENCES codeharmony.student_teacher(teacher_un, student_un)
 );
 
 INSERT INTO codeharmony.users (username,hash,email) VALUES('user1','$argon2id$v=19$m=4096,t=3,p=1$mthVV+FY4YjPzyui4crAUA$0Hp4NgFmf4fLJzrtyitrUYUxL07HDCMax0/9HX9TEps','zacxalot@gmail.com');

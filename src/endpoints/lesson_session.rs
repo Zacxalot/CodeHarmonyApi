@@ -5,7 +5,6 @@ use actix_session::Session;
 use actix_web::{get, http::header::ContentType, post, web, HttpResponse, Responder};
 use chrono::NaiveDateTime;
 use deadpool_postgres::{Object, Pool};
-use deadpool_redis::redis::cmd;
 use futures::join;
 use serde::Serialize;
 use serde_json::json;
@@ -26,7 +25,6 @@ struct SessionInfo {
 pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(create_session)
         .service(get_session_info)
-        .service(start_session)
         .service(save_code)
         .service(get_code)
         .service(get_active_sessions_for_user)
@@ -138,90 +136,68 @@ async fn get_session_info_query(
     })
 }
 
-// Start a session
-#[post("session/start/{plan_name}/{session_name}/{section_name}")]
-async fn start_session(
-    redis_pool: web::Data<deadpool_redis::Pool>,
-    path: web::Path<(String, String, String)>,
-) -> Result<impl Responder, CodeHarmonyResponseError> {
-    // Get vars from path
-    let (plan_name, session_name, section_name) = path.into_inner();
-
-    // Get the Redis client
-    let mut client = redis_pool
-        .get()
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
-
-    // Add the session to the Redis
-    cmd("SET")
-        .arg(&[
-            "session:hosts:user1",
-            "plan_name",
-            &plan_name,
-            "session_name",
-            &session_name,
-            "section_name",
-            &section_name,
-        ])
-        .query_async(&mut client)
-        .await
-        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
-
-    // Return Ok!
-    Ok(HttpResponse::Ok())
-}
-
-// Save code to redis
+// Save code to db
 #[post("session/save/{plan_name}/{session_name}/{host}/{section_name}")]
 async fn save_code(
-    redis_pool: web::Data<deadpool_redis::Pool>,
     path: web::Path<(String, String, String, String)>,
     code: String,
     session: Session,
+    db_pool: web::Data<Pool>,
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
     if let Ok(Some(username)) = session.get::<String>("username") {
+        // Check code length
+        if code.len() > 10000 {
+            return Err(CodeHarmonyResponseError::BadRequest(
+                0,
+                "Code too long!".to_owned(),
+            ));
+        }
+
         // Get vars from path
         let (plan_name, session_name, host, section_name) = path.into_inner();
 
-        // Get the Redis client
-        let mut client = redis_pool
+        // Get db client
+        let client = db_pool
             .get()
             .await
             .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
-        if serde_json::from_str::<Vec<String>>(&code).is_err() {
-            return Err(CodeHarmonyResponseError::BadRequest(
-                0,
-                "Invalid code data".to_string(),
-            ));
-        }
+        const STATEMENT: &str = "
+            INSERT INTO codeharmony.code_submission(teacher_un, plan_name, section_name, session_name, student_un, code)
+            VALUES($1,$2,$3,$4,$5,$6)
+            ON CONFLICT ON CONSTRAINT code_submission_pk
+            DO UPDATE SET code=$6
+        ";
 
-        // Save code to hashset
-        cmd("HSET")
-            .arg(&[
-                &format!(
-                    "session:sessions:{}:{}:{}:{}:{}",
-                    host, plan_name, session_name, section_name, username
-                ),
-                "solution",
-                &code,
-            ])
-            .query_async(&mut client)
+        // Do insert query
+        client
+            .query(
+                STATEMENT,
+                &[
+                    &host,
+                    &plan_name,
+                    &section_name,
+                    &session_name,
+                    &username,
+                    &code,
+                ],
+            )
             .await
-            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+            .map_err(|e| {
+                eprintln!("{:?}", e);
+                CodeHarmonyResponseError::DatabaseConnection
+            })?;
 
-        // Return Ok!
         return Ok(HttpResponse::Ok());
     }
 
     Err(CodeHarmonyResponseError::NotLoggedIn)
 }
 
-// Save code to redis
+// Get code from db
 #[get("session/save/{plan_name}/{session_name}/{host}/{section_name}")]
 async fn get_code(
-    redis_pool: web::Data<deadpool_redis::Pool>,
+    db_pool: web::Data<Pool>,
     path: web::Path<(String, String, String, String)>,
     session: Session,
 ) -> Result<impl Responder, CodeHarmonyResponseError> {
@@ -229,40 +205,40 @@ async fn get_code(
         // Get vars from path
         let (plan_name, session_name, host, section_name) = path.into_inner();
 
-        // Get the Redis client
-        let mut client = redis_pool
+        // Get db client
+        let client = db_pool
             .get()
             .await
             .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
-        println!(
-            "session:sessions:{}:{}:{}:{}:{}",
-            host, plan_name, session_name, section_name, username
-        );
+        const STATEMENT: &str = "SELECT code FROM codeharmony.code_submission WHERE teacher_un = $1 AND plan_name = $2 AND section_name = $3 AND session_name = $4 AND student_un = $5";
 
-        // Save code to hashset
-        let code: String = cmd("HGET")
-            .arg(&[
-                &format!(
-                    "session:sessions:{}:{}:{}:{}:{}",
-                    host, plan_name, session_name, section_name, username
-                ),
-                "solution",
-            ])
-            .query_async(&mut client)
+        let rows = client
+            .query(
+                STATEMENT,
+                &[&host, &plan_name, &section_name, &session_name, &username],
+            )
             .await
-            .unwrap_or_default();
+            .map_err(|e| {
+                eprintln!("{:?}", e);
+                CodeHarmonyResponseError::InternalError(
+                    1,
+                    "Couldn't get rows from database".to_string(),
+                )
+            })?;
 
-        println!("{}", code);
-
-        if code.is_empty() {
-            return Err(CodeHarmonyResponseError::NotFound);
+        if let Some(row) = rows.first() {
+            if let Ok(code) = row.try_get::<usize, String>(0) {
+                // Return Ok!
+                return Ok(HttpResponse::Ok()
+                    .content_type(ContentType::json())
+                    .body(code));
+            }
         }
 
-        // Return Ok!
         return Ok(HttpResponse::Ok()
             .content_type(ContentType::json())
-            .body(code));
+            .body("[]"));
     }
 
     Err(CodeHarmonyResponseError::NotLoggedIn)
@@ -290,8 +266,8 @@ async fn get_active_sessions_for_user(
             .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
         const STATEMENT:&str = "SELECT session_name,plan_name,username,session_date FROM codeharmony.lesson_session
-LEFT JOIN codeharmony.student_teacher ON codeharmony.lesson_session.username = codeharmony.student_teacher.teacher_un 
-WHERE codeharmony.student_teacher.student_un = $1 OR codeharmony.lesson_session.username = $1";
+JOIN codeharmony.student_teacher ON codeharmony.lesson_session.username = codeharmony.student_teacher.teacher_un 
+WHERE codeharmony.student_teacher.student_un = $1";
 
         // Get rows from database
         let rows = client.query(STATEMENT, &[&username]).await.map_err(|e| {

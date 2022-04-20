@@ -1,8 +1,9 @@
 use std::{env, fs};
 
 use actix::Actor;
-use actix_session::CookieSession;
+use actix_session::{storage::CookieSessionStore, SessionMiddleware};
 use actix_web::{
+    cookie::Key,
     web::{self},
     App, HttpServer,
 };
@@ -37,7 +38,6 @@ async fn main() -> std::io::Result<()> {
     println!("Hosting on {}:{}", &host, &port);
 
     let postgres_pool = create_postgres_pool().await;
-    let redis_pool = create_redis_pool();
 
     // Setup lesson session server
     let ws_session_server = SessionServer::new().start();
@@ -50,7 +50,6 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(create_cookie_session())
             .app_data(web::Data::new(postgres_pool.clone()))
-            .app_data(web::Data::new(redis_pool.clone()))
             .app_data(web::Data::new(ws_session_server.clone()))
             .app_data(web::Data::new(teacher_code_actor.clone()))
             .route("/ws", web::get().to(session_service))
@@ -66,8 +65,15 @@ async fn main() -> std::io::Result<()> {
     .await
 }
 
-fn create_cookie_session() -> CookieSession {
-    CookieSession::signed(&[0; 32]).secure(false)
+fn create_cookie_session() -> SessionMiddleware<CookieSessionStore> {
+    // Load .ENV file
+    dotenv().ok();
+
+    // Get session key
+    let session_key = env::var("SESSION_KEY").expect("SESSION_KEY not set!");
+    let session_key = Key::from(session_key.as_bytes());
+
+    SessionMiddleware::new(CookieSessionStore::default(), session_key)
 }
 
 async fn create_postgres_pool() -> deadpool_postgres::Pool {
@@ -142,13 +148,4 @@ async fn create_postgres_pool() -> deadpool_postgres::Pool {
     println!("Postgres pool valid");
 
     pool
-}
-
-fn create_redis_pool() -> deadpool_redis::Pool {
-    // Load .ENV file
-    dotenv().ok();
-
-    // Setup redis pool
-    let cfg = deadpool_redis::Config::from_url("redis://127.0.0.1:6379");
-    cfg.create_pool(None).expect("Couldn't create redis pool")
 }
