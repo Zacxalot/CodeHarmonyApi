@@ -20,7 +20,7 @@ use endpoints::{account_management, lesson_plan, lesson_session, student_teacher
 use deadpool_postgres::{ManagerConfig, RecyclingMethod};
 use dotenv::dotenv;
 
-use crate::endpoints::{code_execution, publish_plan};
+use crate::endpoints::{code_execution, publish_plan, student_code};
 
 mod actors;
 mod endpoints;
@@ -59,6 +59,7 @@ async fn main() -> std::io::Result<()> {
             .configure(student_teacher::init)
             .configure(code_execution::init)
             .configure(publish_plan::init)
+            .configure(student_code::init)
     })
     .bind(format!("{}:{}", host, port))?
     .run()
