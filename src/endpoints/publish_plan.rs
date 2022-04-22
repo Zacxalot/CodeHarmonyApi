@@ -1,17 +1,19 @@
 use std::convert::TryFrom;
 
 use actix_session::Session;
-use actix_web::{get, post, web, HttpResponse, Responder};
+use actix_web::{delete, get, post, web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::utils::error::CodeHarmonyResponseError;
+use crate::{endpoints::lesson_plan::PlanSection, utils::error::CodeHarmonyResponseError};
 
 // Group all of the services together into a single init
 pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(publish_plan)
         .service(search_plans)
-        .service(get_plans);
+        .service(get_plans)
+        .service(delete_plan)
+        .service(get_plan);
 }
 
 #[derive(Deserialize)]
@@ -222,6 +224,110 @@ async fn get_plans(
             })?;
 
         return Ok(HttpResponse::Ok().json(json!(results)));
+    }
+    Err(CodeHarmonyResponseError::NotLoggedIn)
+}
+
+#[delete("/plan/published/{plan_name}")]
+async fn delete_plan(
+    db_pool: web::Data<deadpool_postgres::Pool>,
+    session: Session,
+    path: web::Path<String>,
+) -> Result<impl Responder, CodeHarmonyResponseError> {
+    let plan_name = path.into_inner();
+
+    // Get username
+    if let Ok(Some(username)) = session.get::<String>("username") {
+        // Get db client
+        let client = db_pool
+            .get()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+        const STATEMENT: &str =
+            "DELETE FROM codeharmony.published_lesson_plan WHERE username=$1 AND plan_name=$2";
+
+        client
+            .query(STATEMENT, &[&username, &plan_name])
+            .await
+            .map_err(|e| {
+                eprintln!("{:?}", e);
+                CodeHarmonyResponseError::DatabaseQueryFailed
+            })?;
+
+        return Ok(HttpResponse::Ok());
+    }
+    Err(CodeHarmonyResponseError::NotLoggedIn)
+}
+
+#[derive(Serialize)]
+struct PublishedPlan {
+    plan_sections: Vec<PlanSection>,
+    description: String,
+}
+
+#[get("/plan/published/{plan_name}/{plan_owner}")]
+async fn get_plan(
+    db_pool: web::Data<deadpool_postgres::Pool>,
+    session: Session,
+    path: web::Path<(String, String)>,
+) -> Result<impl Responder, CodeHarmonyResponseError> {
+    let (plan_name, plan_owner) = path.into_inner();
+
+    // Get username
+    if let Ok(Some(_username)) = session.get::<String>("username") {
+        // Get db client
+        let client = db_pool
+            .get()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+        // Get rows from database
+        const STATEMENT:&str = "SELECT section_name, section_type, section_elements, coding_data, order_pos FROM codeharmony.published_lesson_plan_section WHERE plan_name=$1 and username=$2 ORDER BY order_pos ASC";
+        let rows = client
+            .query(STATEMENT, &[&plan_name, &plan_owner])
+            .await
+            .map_err(|_| {
+                CodeHarmonyResponseError::InternalError(
+                    1,
+                    "Couldn't get rows from database".to_string(),
+                )
+            })?;
+
+        let plan_sections = rows
+            .iter()
+            .map(PlanSection::try_from)
+            .collect::<Result<Vec<PlanSection>, _>>()
+            .map_err(|e| {
+                eprintln!("{:?}", e);
+                CodeHarmonyResponseError::CouldntParseRows
+            })?;
+
+        const DESCRIPTION:&str = "SELECT description FROM codeharmony.published_lesson_plan WHERE plan_name=$1 and username = $2";
+        let rows = client
+            .query(DESCRIPTION, &[&plan_name, &plan_owner])
+            .await
+            .map_err(|e| {
+                eprintln!("{:?}", e);
+                CodeHarmonyResponseError::InternalError(
+                    1,
+                    "Couldn't get rows from database".to_string(),
+                )
+            })?;
+
+        if let Some(row) = rows.get(0) {
+            if let Ok(description) = row.try_get::<usize, String>(0) {
+                return Ok(HttpResponse::Ok().json(PublishedPlan {
+                    plan_sections,
+                    description,
+                }));
+            }
+        }
+
+        return Ok(HttpResponse::Ok().json(PublishedPlan {
+            plan_sections,
+            description: String::new(),
+        }));
     }
     Err(CodeHarmonyResponseError::NotLoggedIn)
 }
