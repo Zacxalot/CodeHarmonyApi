@@ -2,7 +2,7 @@ use actix::{Actor, ActorContext, Addr, AsyncContext, Handler, StreamHandler};
 use actix_web_actors::ws;
 
 use crate::actors::ws_server::{
-    ControlInstruction, SendTextMessage, SessionIdentifier, SessionServer, SetStudentDoc,
+    ControlInstruction, Leave, SendTextMessage, SessionIdentifier, SessionServer, SetStudentDoc,
     StudentJoin, TeacherJoin, UpdateStudentCode, WSResponse,
 };
 
@@ -17,6 +17,17 @@ impl Actor for WsClientSession {
 
     fn started(&mut self, _: &mut Self::Context) {
         println!("New Connection");
+    }
+
+    fn stopped(&mut self, ctx: &mut Self::Context) {
+        if let Some(connected_session) = &self.connected_session {
+            self.addr.do_send(Leave {
+                identifier: connected_session.clone(),
+                addr: ctx.address().recipient::<WSResponse>(),
+            });
+        }
+
+        println!("Disconnection");
     }
 }
 
@@ -123,6 +134,7 @@ impl Handler<WSResponse> for WsClientSession {
                 println!("SETTING CONNECTED SESSION");
                 self.connected_session = Some(identifier)
             }
+            WSResponse::Close => ctx.close(None),
         }
     }
 }

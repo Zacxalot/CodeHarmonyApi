@@ -100,6 +100,7 @@ pub struct SessionIdentifier {
 pub enum WSResponse {
     Msg(String),
     SetConnectedSession(SessionIdentifier),
+    Close,
 }
 
 // Teacher Join
@@ -161,6 +162,30 @@ impl Handler<StudentJoin> for SessionServer {
 
             // Insert the student into the list
             session.students.insert(msg.username, msg.addr);
+        }
+    }
+}
+
+#[derive(Message, Debug)]
+#[rtype(result = "()")]
+pub struct Leave {
+    pub identifier: SessionIdentifier,
+    pub addr: Recipient<WSResponse>,
+}
+
+impl Handler<Leave> for SessionServer {
+    type Result = ();
+    fn handle(&mut self, msg: Leave, _: &mut Self::Context) -> Self::Result {
+        // If the room exists,
+        if let Some(session) = self.sessions.get_mut(&msg.identifier) {
+            session.students.remove_by_right(&msg.addr);
+
+            if (session.teacher.addr == msg.addr) {
+                for student in session.students.right_values() {
+                    student.do_send(WSResponse::Close)
+                }
+                self.sessions.remove(&msg.identifier);
+            }
         }
     }
 }
