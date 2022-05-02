@@ -46,11 +46,6 @@ pub struct User {
     username: String,
 }
 
-#[derive(Debug)]
-pub struct Student {
-    addr: Recipient<WSResponse>,
-}
-
 #[allow(dead_code)]
 pub struct SessionRoom {
     teacher: User,
@@ -180,7 +175,7 @@ impl Handler<Leave> for SessionServer {
         if let Some(session) = self.sessions.get_mut(&msg.identifier) {
             session.students.remove_by_right(&msg.addr);
 
-            if (session.teacher.addr == msg.addr) {
+            if session.teacher.addr == msg.addr {
                 for student in session.students.right_values() {
                     student.do_send(WSResponse::Close)
                 }
@@ -235,6 +230,14 @@ impl Handler<ControlInstruction> for SessionServer {
 
                     session.current_student_username = Some(instruction[1].to_owned());
                     student_addr.do_send(WSResponse::Msg("subscribe".to_owned()));
+                }
+            }
+        } else if instruction[0] == "unsub" {
+            if let Some(session) = self.sessions.get_mut(&msg.identifier) {
+                if let Some(to_unsub_username) = &session.current_student_username {
+                    if let Some(to_unsub_addr) = session.students.get_by_left(to_unsub_username) {
+                        to_unsub_addr.do_send(WSResponse::Msg("unsub".to_owned()));
+                    }
                 }
             }
         }

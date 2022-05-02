@@ -44,7 +44,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsClientSession {
 
         match msg {
             ws::Message::Text(text) => {
-                println!("{:?}", &text);
                 let split: Vec<&str> = text.splitn(2, ' ').collect();
                 if split.len() == 2 {
                     let addr = ctx.address().recipient::<WSResponse>();
@@ -110,7 +109,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsClientSession {
                         }
                     }
                 }
-                println!("GOT - {}", text);
             }
             ws::Message::Close(reason) => {
                 ctx.close(reason);

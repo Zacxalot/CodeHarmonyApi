@@ -116,7 +116,7 @@ async fn execute_code(
         if let Some(row) = rows.into_iter().next() {
             if let Ok(json) = row.try_get::<usize, Json<CodingData>>(0) {
                 // Return Accepted with the body if it's correct
-                if body.run.stdout.trim() == json.0.expectedOutput {
+                if body.run.output.trim() == json.0.expectedOutput {
                     return Ok(HttpResponse::Accepted().json(body));
                 } else {
                     // Just return Ok with body if it's wrong

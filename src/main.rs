@@ -4,6 +4,7 @@ use actix::Actor;
 use actix_session::{storage::CookieSessionStore, SessionMiddleware};
 use actix_web::{
     cookie::Key,
+    middleware::Logger,
     web::{self},
     App, HttpServer,
 };
@@ -45,10 +46,15 @@ async fn main() -> std::io::Result<()> {
     // Teacher code actor
     let teacher_code_actor = TeacherCodeManager::new().start();
 
+    // Error logger
+    env_logger::init();
+
     //Create and start server
     HttpServer::new(move || {
+        let logger = Logger::default();
         App::new()
             .wrap(create_cookie_session())
+            .wrap(logger)
             .app_data(web::Data::new(postgres_pool.clone()))
             .app_data(web::Data::new(ws_session_server.clone()))
             .app_data(web::Data::new(teacher_code_actor.clone()))
