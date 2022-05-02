@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 
 use actix_session::Session;
-use actix_web::{get, post, web, HttpResponse, Responder};
+use actix_web::{delete, get, post, web, HttpResponse, Responder};
 use argon2::{
     password_hash::{rand_core::OsRng, SaltString},
     Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
@@ -17,7 +17,8 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(login)
         .service(logout)
         .service(register)
-        .service(check_logged_in);
+        .service(check_logged_in)
+        .service(delete_account);
 }
 
 #[derive(Deserialize, Serialize)]
@@ -171,6 +172,31 @@ async fn check_logged_in(session: Session) -> Result<impl Responder, CodeHarmony
             "Not logged in".to_owned(),
         ))
     }
+}
+
+// Delete User
+#[delete("/account")]
+async fn delete_account(
+    db_pool: web::Data<deadpool_postgres::Pool>,
+    session: Session,
+) -> Result<impl Responder, CodeHarmonyResponseError> {
+    if let Ok(Some(username)) = session.get::<String>("username") {
+        // Get db client
+        let client = db_pool
+            .get()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+        const STATEMENT: &str = "DELETE FROM codeharmony.users WHERE username = $1";
+        client.query(STATEMENT, &[&username]).await.map_err(|e| {
+            eprintln!("{:?}", e);
+            CodeHarmonyResponseError::DatabaseQueryFailed
+        })?;
+
+        return Ok(HttpResponse::Ok());
+    }
+
+    Err(CodeHarmonyResponseError::NotLoggedIn)
 }
 
 #[cfg(test)]

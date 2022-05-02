@@ -41,6 +41,7 @@ pub struct PistonResponse {
 struct RunRequest {
     piston: PistonRequest,
     identifier: SectionIdentifier,
+    session_name: String,
 }
 
 #[derive(Deserialize)]
@@ -117,6 +118,26 @@ async fn execute_code(
             if let Ok(json) = row.try_get::<usize, Json<CodingData>>(0) {
                 // Return Accepted with the body if it's correct
                 if body.run.output.trim() == json.0.expectedOutput {
+                    // Save the correct mark on the students code before we finish
+                    const MARK_CORRECT_STATEMENT:&str =
+                    "INSERT INTO codeharmony.code_submission (teacher_un,student_un,plan_name,session_name,section_name,correct)
+                    VALUES ($1,$2,$3,$4,$5,true)
+                    ON CONFLICT ON CONSTRAINT code_submission_pk DO UPDATE SET correct = true";
+
+                    client
+                        .query(
+                            MARK_CORRECT_STATEMENT,
+                            &[
+                                &payload.identifier.host,
+                                &username,
+                                &payload.identifier.plan_name,
+                                &payload.session_name,
+                                &payload.identifier.section_name,
+                            ],
+                        )
+                        .await
+                        .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
                     return Ok(HttpResponse::Accepted().json(body));
                 } else {
                     // Just return Ok with body if it's wrong

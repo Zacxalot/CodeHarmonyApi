@@ -1,7 +1,11 @@
+use std::convert::TryFrom;
+
 use crate::utils::error::CodeHarmonyResponseError;
 use actix_session::Session;
 use actix_web::{get, http::header::ContentType, post, web, HttpResponse, Responder};
 use deadpool_postgres::Pool;
+use pg_mapper::TryFromRow;
+use serde::Serialize;
 
 pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(save_code)
@@ -118,6 +122,12 @@ async fn get_code(
     Err(CodeHarmonyResponseError::NotLoggedIn)
 }
 
+#[derive(TryFromRow, Serialize)]
+struct SubmittedList {
+    student_un: String,
+    correct: bool,
+}
+
 #[get("session/submitted/{plan_name}/{session_name}/{section_name}")]
 async fn get_submitted_list(
     db_pool: web::Data<Pool>,
@@ -133,7 +143,7 @@ async fn get_submitted_list(
             .await
             .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
 
-        const STATEMENT: &str = "SELECT student_un FROM codeharmony.code_submission WHERE teacher_un = $1 AND plan_name = $2 AND section_name = $3 AND session_name = $4";
+        const STATEMENT: &str = "SELECT student_un, correct FROM codeharmony.code_submission WHERE teacher_un = $1 AND plan_name = $2 AND section_name = $3 AND session_name = $4";
 
         let rows = client
             .query(
@@ -149,16 +159,16 @@ async fn get_submitted_list(
                 )
             })?;
 
-        let names = rows
+        let submitted = rows
             .into_iter()
-            .map(|r| r.try_get::<usize, String>(0))
-            .collect::<Result<Vec<String>, _>>()
+            .map(SubmittedList::try_from)
+            .collect::<Result<Vec<SubmittedList>, _>>()
             .map_err(|e| {
                 eprintln!("{:?}", e);
                 CodeHarmonyResponseError::CouldntParseRows
             })?;
 
-        return Ok(HttpResponse::Ok().json(names));
+        return Ok(HttpResponse::Ok().json(submitted));
     }
     Err(CodeHarmonyResponseError::NotLoggedIn)
 }
