@@ -13,7 +13,8 @@ pub fn init(cfg: &mut web::ServiceConfig) {
         .service(search_plans)
         .service(get_plans)
         .service(delete_plan)
-        .service(get_plan);
+        .service(get_plan)
+        .service(save_plan);
 }
 
 #[derive(Deserialize)]
@@ -24,7 +25,7 @@ struct PublishData {
     description: String,
 }
 
-//Rename a plan section
+//Publish a plan
 #[post("/plan/publish")]
 async fn publish_plan(
     db_pool: web::Data<deadpool_postgres::Pool>,
@@ -329,5 +330,87 @@ async fn get_plan(
             description: String::new(),
         }));
     }
+    Err(CodeHarmonyResponseError::NotLoggedIn)
+}
+
+#[derive(Deserialize)]
+#[allow(non_snake_case)]
+struct SaveData {
+    planName: String,
+    publishedName: String,
+    publishHost: String,
+}
+
+//Save a published plan
+#[post("/plan/save")]
+async fn save_plan(
+    db_pool: web::Data<deadpool_postgres::Pool>,
+    save_data: web::Json<SaveData>,
+    session: Session,
+) -> Result<impl Responder, CodeHarmonyResponseError> {
+    // Get username
+    if let Ok(Some(username)) = session.get::<String>("username") {
+        // Get db client
+        let mut client = db_pool
+            .get()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+        // Insert parent record in published_lesson_plan
+        const PARENT_STATEMENT: &str = "
+        INSERT INTO codeharmony.lesson_plan(plan_name, username)
+        VALUES ($1, $2)
+        ";
+
+        // Copy over all of the plan sections
+        const SECTIONS_STATEMENT:&str = "
+        INSERT INTO codeharmony.lesson_plan_section(plan_name, username, section_elements, order_pos, coding_data, section_name, section_type)
+        SELECT $1, $2::VARCHAR, section_elements, order_pos, coding_data, section_name, section_type
+        FROM codeharmony.published_lesson_plan_section
+        WHERE plan_name = $3 AND username = $4
+        ";
+
+        // Start transaction
+        let transaction = client
+            .transaction()
+            .await
+            .map_err(|_| CodeHarmonyResponseError::DatabaseConnection)?;
+
+        // Parent execute
+        transaction
+            .query(PARENT_STATEMENT, &[&save_data.planName, &username])
+            .await
+            .map_err(|e| {
+                eprintln!("{:?}", e);
+                CodeHarmonyResponseError::DatabaseQueryFailed
+            })?;
+
+        // Sections execute
+        transaction
+            .query(
+                SECTIONS_STATEMENT,
+                &[
+                    &save_data.planName,
+                    &username,
+                    &save_data.publishedName,
+                    &save_data.publishHost,
+                ],
+            )
+            .await
+            .map_err(|e| {
+                eprintln!("{:?}", e);
+                CodeHarmonyResponseError::DatabaseQueryFailed
+            })?;
+
+        // Commit transaction, everything went well
+        transaction.commit().await.map_err(|e| {
+            eprintln!("{:?}", e);
+            CodeHarmonyResponseError::DatabaseQueryFailed
+        })?;
+
+        // Return Ok!
+        return Ok(HttpResponse::Ok());
+    }
+
     Err(CodeHarmonyResponseError::NotLoggedIn)
 }
